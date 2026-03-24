@@ -1,0 +1,89 @@
+/* src/pages/Home.css */
+
+.home-container {
+  padding: 40px;
+  font-family: 'Arial', sans-serif;
+  text-align: center;
+  background-color: #f4fff4; /* light green background */
+  min-height: 100vh;
+}
+
+/* Hero */
+.hero h1 {
+  font-size: 2.5rem;
+  color: #2e7d32; /* dark green */
+  margin-bottom: 10px;
+}
+
+.hero p {
+  font-size: 1.2rem;
+  color: #4caf50; /* medium green */
+  margin-bottom: 40px;
+}
+
+/* Feature cards */
+.features {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 40px;
+}
+
+.feature-card {
+  background-color: #ffffff;
+  border: 2px solid #a5d6a7; /* light green border */
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 250px;
+  box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+}
+
+.feature-card h3 {
+  color: #2e7d32;
+  margin-bottom: 10px;
+}
+
+.feature-card p {
+  color: #555;
+}
+
+/* Buttons */
+.cta-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+
+.btn {
+  padding: 12px 25px;
+  border-radius: 5px;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.3s;
+}
+
+.btn-blue {
+  background-color: #1976d2;
+}
+
+.btn-blue:hover {
+  background-color: #1565c0;
+}
+
+.btn-green {
+  background-color: #388e3c;
+}
+
+.btn-green:hover {
+  background-color: #2e7d32;
+}
+
+/* Footer */
+.footer {
+  margin-top: 60px;
+  color: #555;
+  font-size: 0.9rem;
+}

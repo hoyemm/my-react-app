@@ -1,8 +1,9 @@
 
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
-import { Home } from './pages/home';
-import { Signup } from './pages/signup';
-import { User } from './pages/user';
+import  Home  from './pages/Home';
+import Signup  from './pages/Signup';
+import  User  from './pages/User';
+import  Login  from './pages/Login';
 import './App.css'
 
 function App() {
@@ -12,8 +13,9 @@ function App() {
       <Router>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/user" element={<User />} />
+          <Route path="/Signup" element={<Signup />} />
+          <Route path="/User" element={<User />} />
+          <Route path="/Login" element={<Login />} />
         </Routes>
       </Router>
 
