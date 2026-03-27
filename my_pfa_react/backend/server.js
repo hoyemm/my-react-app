@@ -1,8 +1,8 @@
-// backend/server.js
 const express = require('express');
 const mysql = require('mysql');
 const cors = require('cors');
 const axios = require('axios');
+const bcrypt = require('bcrypt');
 
 const app = express();
 app.use(cors());
@@ -20,41 +20,40 @@ db.connect(err => {
     else console.log("MySQL connected!");
 });
 
-// Your Forecast.Solar API key
-const FORECAST_API_KEY = "YOUR_API_KEY_HERE"; // <<< Replace with your key
+const FORECAST_API_KEY = "YOUR_API_KEY_HERE";
+const SALT_ROUNDS = 10;
 
 // SIGNUP
-app.post("/signup", (req, res) => {
+app.post("/signup", async (req, res) => {
     const { name, email, password, declination, azimuth, latitude, longitude, capacity } = req.body;
-    console.log("Received signup data:", req.body);
 
-    // Check if email exists
     db.query("SELECT * FROM login WHERE email = ?", [email], async (err, existing) => {
         if (err) return res.status(500).json({ error: "Database query failed", details: err });
-
         if (existing.length > 0) return res.status(400).json({ error: "Email already exists" });
 
-        // Validate location via API
-        try {
-            const locRes = await axios.get(`https://api.forecast.solar/check/${latitude}/${longitude}`, {
-                headers: { Authorization: `Bearer ${FORECAST_API_KEY}` }
-            });
-
-            if (!locRes.data || locRes.data.message.code !== 0) {
+        // Validate location via forecast.solar (skip if no API key set)
+        if (FORECAST_API_KEY !== "YOUR_API_KEY_HERE") {
+            try {
+                const locRes = await axios.get(`https://api.forecast.solar/check/${latitude}/${longitude}`, {
+                    headers: { Authorization: `Bearer ${FORECAST_API_KEY}` }
+                });
+                if (!locRes.data || locRes.data.message?.code !== 0) {
+                    return res.status(400).json({ error: "Invalid location" });
+                }
+            } catch (err) {
+                console.error("Location API error:", err.message);
                 return res.status(400).json({ error: "Invalid location" });
             }
-        } catch (err) {
-            console.error("Location API error:", err.message);
-            return res.status(400).json({ error: "Invalid location" });
         }
 
-        // Insert user
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+
         const q = `INSERT INTO login 
             (name, email, password, declination, azimuth, latitude, longitude, capacity) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-        db.query(q, [name, email, password, declination, azimuth, latitude, longitude, capacity], (err, result) => {
+        db.query(q, [name, email, hashedPassword, declination, azimuth, latitude, longitude, capacity], (err, result) => {
             if (err) return res.status(500).json({ error: "Database insert failed", details: err });
-
             return res.json({
                 success: true,
                 userId: result.insertId,
@@ -67,14 +66,16 @@ app.post("/signup", (req, res) => {
 // LOGIN
 app.post("/login", (req, res) => {
     const { email, password } = req.body;
-    console.log("Login attempt:", req.body);
 
-    const q = "SELECT * FROM login WHERE email = ? AND password = ?";
-    db.query(q, [email, password], (err, results) => {
+    const q = "SELECT * FROM login WHERE email = ?";
+    db.query(q, [email], async (err, results) => {
         if (err) return res.status(500).json({ error: "Database query failed" });
         if (results.length === 0) return res.status(401).json({ error: "Email or password is incorrect" });
 
         const user = results[0];
+        const match = await bcrypt.compare(password, user.password);
+        if (!match) return res.status(401).json({ error: "Email or password is incorrect" });
+
         return res.json({
             success: true,
             userId: user.id,
@@ -88,24 +89,20 @@ app.post("/login", (req, res) => {
     });
 });
 
-// Forecast endpoint proxy
+// FORECAST PROXY
 app.get("/forecast/:lat/:lon/:dec/:az/:kwp", async (req, res) => {
     const { lat, lon, dec, az, kwp } = req.params;
-
     try {
-        const apiRes = await axios.get(
-            `https://api.forecast.solar/estimate/${lat}/${lon}/${dec}/${az}/${kwp}`,
-            {
-                headers: { Authorization: `Bearer ${FORECAST_API_KEY}` }
-            }
-        );
+        const url = FORECAST_API_KEY !== "YOUR_API_KEY_HERE"
+            ? `https://api.forecast.solar/${FORECAST_API_KEY}/estimate/${lat}/${lon}/${dec}/${az}/${kwp}`
+            : `https://api.forecast.solar/estimate/${lat}/${lon}/${dec}/${az}/${kwp}`;
 
+        const apiRes = await axios.get(url);
         const data = apiRes.data;
 
         if (!data.result || !data.result.watts) {
             return res.status(400).json({ error: "Forecast API returned invalid data", raw: data });
         }
-
         res.json(data);
     } catch (err) {
         console.error("Forecast API error:", err.message);
@@ -113,4 +110,4 @@ app.get("/forecast/:lat/:lon/:dec/:az/:kwp", async (req, res) => {
     }
 });
 
-app.listen(3001, () => console.log("Connected to backend on port 3001!"));
+app.listen(3001, () => console.log("Backend running on port 3001"));

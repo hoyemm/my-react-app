@@ -1,0 +1,11 @@
+/* src/App.css */
+#root { isolation: isolate; }
+
+.recharts-surface { overflow: visible; }
+.recharts-tooltip-wrapper { outline: none; }
+.recharts-default-tooltip {
+  background: var(--bg2) !important;
+  border: 1px solid var(--border-accent) !important;
+  border-radius: var(--radius-sm) !important;
+  font-size: 0.82rem;
+}
