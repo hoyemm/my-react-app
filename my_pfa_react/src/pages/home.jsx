@@ -49,34 +49,6 @@ function Count({ to, suffix = "", decimals = 0 }) {
   return <span ref={ref}>{v}{suffix}</span>;
 }
 
-/* ── live demo chart ── */
-const HOURS = ["6","7","8","9","10","11","12","13","14","15","16","17","18","19"];
-const BASE  = [0, 120, 480, 1050, 1820, 2640, 3100, 2980, 2520, 1780, 980, 340, 60, 0];
-function LiveDemo({ kw }) {
-  const scale = kw / 5;
-  const data  = BASE.map(v => Math.round(v * scale));
-  const peak  = Math.max(...data);
-  const [hov, setHov] = useState(null);
-  return (
-    <div className="live-demo">
-      <div className="demo-bars">
-        {data.map((v, i) => (
-          <div key={i} className={`demo-col ${hov === i ? "hov" : ""}`}
-            onMouseEnter={() => setHov(i)} onMouseLeave={() => setHov(null)}>
-            {hov === i && (
-              <div className="demo-tip">
-                <b>{v} W</b><span>{HOURS[i]}:00</span>
-              </div>
-            )}
-            <div className="demo-fill" style={{ height: `${(v / Math.max(peak, 1)) * 100}%` }} />
-            <span className="demo-lbl">{i % 2 === 0 ? HOURS[i] : ""}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 /* ── contact form state ── */
 function ContactForm() {
   const [vals, setVals] = useState({ name: "", email: "", subject: "", message: "" });
@@ -120,12 +92,8 @@ function ContactForm() {
 
 export default function Home() {
   const [theme, toggleTheme] = useTheme();
-  const [kw, setKw]          = useState(5);
   const [menuOpen, setMenu]  = useState(false);
   useReveal();
-
-  const peak  = ((kw / 5) * 3.1).toFixed(1);
-  const daily = ((kw / 5) * 18.6).toFixed(1);
 
   const scrollTo = id => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
@@ -143,7 +111,6 @@ export default function Home() {
 
         {/* desktop */}
         <div className="nav-center">
-          <button onClick={() => scrollTo("demo")}>Demo</button>
           <button onClick={() => scrollTo("features")}>Features</button>
           <button onClick={() => scrollTo("about")}>About</button>
           <button onClick={() => scrollTo("contact")}>Contact</button>
@@ -151,7 +118,7 @@ export default function Home() {
 
         <div className="nav-right">
           <button className="nav-theme" onClick={toggleTheme} aria-label="toggle theme">
-            {theme === "dark" ? "○" : "●"}
+            {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
           </button>
           <Link to="/Login" className="nav-login">Sign In</Link>
           <Link to="/Signup" className="nav-cta">Get Started</Link>
@@ -165,7 +132,7 @@ export default function Home() {
 
       {menuOpen && (
         <div className="mobile-menu">
-          {["demo","features","about","contact"].map(id => (
+          {["features","about","contact"].map(id => (
             <button key={id} onClick={() => scrollTo(id)}>{id.charAt(0).toUpperCase()+id.slice(1)}</button>
           ))}
           <Link to="/Login" onClick={() => setMenu(false)}>Sign In</Link>
@@ -202,9 +169,7 @@ export default function Home() {
 
           <div className="hero-btns">
             <Link to="/Signup" className="btn-glow">Start forecasting free</Link>
-            <button className="btn-outline" onClick={() => scrollTo("demo")}>
-              Watch the demo ↓
-            </button>
+            <Link to="/Login" className="btn-outline">Sign In →</Link>
           </div>
 
           <div className="hero-trust">
@@ -295,73 +260,6 @@ export default function Home() {
         <div className="metric">
           <div className="metric-num">∞</div>
           <div className="metric-lbl">Panel configurations</div>
-        </div>
-      </section>
-
-      {/* ════════════════════════════════ DEMO ════════════════════════════════ */}
-      <section id="demo" className="demo-section reveal">
-        <div className="section-label">Interactive Preview</div>
-        <h2 className="section-h2">Drag. Drop. Forecast.</h2>
-        <p className="section-p">Slide your system capacity and watch the power curve respond in real time.</p>
-
-        <div className="demo-layout">
-          {/* controls */}
-          <div className="demo-panel reveal">
-            <h3>System Settings</h3>
-
-            <div className="dp-field">
-              <label>System Capacity</label>
-              <div className="dp-slider-row">
-                <input type="range" min="1" max="20" value={kw}
-                  onChange={e => setKw(+e.target.value)} className="dp-slider" />
-                <span className="dp-val">{kw} kWp</span>
-              </div>
-            </div>
-
-            <div className="dp-field">
-              <label>Location</label>
-              <div className="dp-info">📍 Paris, France (sample)</div>
-            </div>
-
-            <div className="dp-field">
-              <label>Panel Angle</label>
-              <div className="dp-info">↕ 35° · ↔ 0° azimuth</div>
-            </div>
-
-            <div className="dp-results">
-              <div className="dp-result">
-                <span>Peak output</span>
-                <strong>{peak} kW</strong>
-              </div>
-              <div className="dp-result">
-                <span>Daily yield</span>
-                <strong>{daily} kWh</strong>
-              </div>
-              <div className="dp-result">
-                <span>CO₂ offset</span>
-                <strong>{(daily * 0.233).toFixed(1)} kg</strong>
-              </div>
-            </div>
-
-            <Link to="/Signup" className="dp-cta">Try with your location →</Link>
-          </div>
-
-          {/* chart */}
-          <div className="demo-chart-panel reveal">
-            <div className="dcp-header">
-              <div>
-                <div className="dcp-title">Today's Power Curve</div>
-                <div className="dcp-sub">Hover bars for exact wattage</div>
-              </div>
-              <div className="dcp-live"><span />Live Preview</div>
-            </div>
-            <LiveDemo kw={kw} />
-            <div className="dcp-footer">
-              <span>Sunrise 06:30</span>
-              <span>Peak ~12:00</span>
-              <span>Sunset 19:00</span>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -535,7 +433,6 @@ export default function Home() {
           <div className="footer-links">
             <div className="fl-col">
               <strong>Product</strong>
-              <button onClick={() => scrollTo("demo")}>Demo</button>
               <button onClick={() => scrollTo("features")}>Features</button>
               <Link to="/Signup">Sign up free</Link>
             </div>

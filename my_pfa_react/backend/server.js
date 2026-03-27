@@ -89,6 +89,37 @@ app.post("/login", (req, res) => {
     });
 });
 
+// UPDATE PROFILE
+app.put("/users/:id", async (req, res) => {
+    const { id } = req.params;
+    const { name, email, password, declination, azimuth, latitude, longitude, capacity } = req.body;
+
+    // Check if email is taken by another user
+    db.query("SELECT * FROM login WHERE email = ? AND id != ?", [email, id], async (err, existing) => {
+        if (err) return res.status(500).json({ error: "Database query failed" });
+        if (existing.length > 0) return res.status(400).json({ error: "Email already in use by another account" });
+
+        let q, params;
+
+        if (password) {
+            // Update with new password
+            const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+            q = `UPDATE login SET name=?, email=?, password=?, declination=?, azimuth=?, latitude=?, longitude=?, capacity=? WHERE id=?`;
+            params = [name, email, hashedPassword, declination, azimuth, latitude, longitude, capacity, id];
+        } else {
+            // Update without touching password
+            q = `UPDATE login SET name=?, email=?, declination=?, azimuth=?, latitude=?, longitude=?, capacity=? WHERE id=?`;
+            params = [name, email, declination, azimuth, latitude, longitude, capacity, id];
+        }
+
+        db.query(q, params, (err, result) => {
+            if (err) return res.status(500).json({ error: "Database update failed", details: err });
+            if (result.affectedRows === 0) return res.status(404).json({ error: "User not found" });
+            return res.json({ success: true, name, latitude, longitude, declination, azimuth, capacity });
+        });
+    });
+});
+
 // FORECAST PROXY
 app.get("/forecast/:lat/:lon/:dec/:az/:kwp", async (req, res) => {
     const { lat, lon, dec, az, kwp } = req.params;

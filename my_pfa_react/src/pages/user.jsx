@@ -1,6 +1,6 @@
 // src/pages/User.jsx
-import { useEffect, useState } from "react";
-import { useLocation, Link } from "react-router-dom";
+import { useEffect, useState, useRef } from "react";
+import { useLocation, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import {
   AreaChart, Area,
@@ -33,9 +33,60 @@ const CustomTooltip = ({ active, payload, label, unit }) => {
   );
 };
 
+/* ── User avatar dropdown ── */
+function UserMenu({ name, onNavigate }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const initials = name
+    ? name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2)
+    : "U";
+
+  return (
+    <div className="user-menu-wrap" ref={ref}>
+      <button className="user-avatar-btn" onClick={() => setOpen(o => !o)} aria-label="User menu">
+        <div className="user-avatar">{initials}</div>
+        <span className="user-avatar-name">{name || "User"}</span>
+        <span className="user-avatar-caret" style={{ transform: open ? "rotate(180deg)" : "none" }}>▾</span>
+      </button>
+
+      {open && (
+        <div className="user-dropdown">
+          <div className="ud-header">
+            <div className="ud-avatar">{initials}</div>
+            <div>
+              <div className="ud-name">{name || "User"}</div>
+              <div className="ud-role">Solar Dashboard</div>
+            </div>
+          </div>
+          <div className="ud-divider" />
+          <button className="ud-item" onClick={() => { setOpen(false); onNavigate("profile"); }}>
+            <span>⚙️</span> Edit Profile
+          </button>
+          <button className="ud-item" onClick={() => { setOpen(false); onNavigate("settings"); }}>
+            <span>🔧</span> System Settings
+          </button>
+          <div className="ud-divider" />
+          <Link to="/" className="ud-item ud-logout">
+            <span>←</span> Back to Home
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function User() {
   const location = useLocation();
-  const { name, latitude, longitude, declination, azimuth, capacity } = location.state || {};
+  const navigate = useNavigate();
+  const { userId, name, latitude, longitude, declination, azimuth, capacity } = location.state || {};
 
   const [todayData,    setTodayData]    = useState({ power: [], energy: [], cumulative: [] });
   const [tomorrowData, setTomorrowData] = useState({ power: [], energy: [], cumulative: [] });
@@ -105,6 +156,14 @@ export default function User() {
     fetchForecast();
   }, [latitude, longitude, declination, azimuth, capacity]);
 
+  const handleMenuNavigate = (dest) => {
+    if (dest === "profile" || dest === "settings") {
+      navigate("/Profile", {
+        state: { userId, name, latitude, longitude, declination, azimuth, capacity }
+      });
+    }
+  };
+
   const data      = activeDay === "today" ? todayData : tomorrowData;
   const dayLabel  = activeDay === "today" ? "Today" : "Tomorrow";
   const todayDate    = new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
@@ -124,7 +183,7 @@ export default function User() {
           <button className="theme-toggle" onClick={toggleTheme} type="button">
             {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
           </button>
-          <Link to="/" className="home-link">← Home</Link>
+          <UserMenu name={name} onNavigate={handleMenuNavigate} />
         </div>
       </header>
 
