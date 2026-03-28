@@ -2,11 +2,15 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import './Signup.css';
-import validation from './SignupValidation';
+import "./Signup.css";
+import validation from "./SignupValidation";
+import { API_BASE } from "../api";
 
-// ─── Field must live OUTSIDE the parent component so it's never
-//     re-created on each render (which caused the focus-loss bug).
+// Fix #11: use window.L directly instead of a module-level mutable variable
+// to avoid stale references under HMR / multiple component mounts.
+
+// ─── Field defined OUTSIDE parent so it's never recreated on each render
+//     (prevents focus-loss on keystroke — fix #14: better comment)
 function Field({ label, name, type = "text", placeholder, values, errors, onChange }) {
   return (
     <div className="form-group">
@@ -28,8 +32,6 @@ function Field({ label, name, type = "text", placeholder, values, errors, onChan
   );
 }
 
-let L = null;
-
 function SignupPage() {
   const [values, setValues] = useState({
     name: "", email: "", password: "",
@@ -41,12 +43,12 @@ function SignupPage() {
   const [loading,     setLoading]     = useState(false);
   const [mapReady,    setMapReady]    = useState(false);
 
-  const navigate        = useNavigate();
-  const mapRef          = useRef(null);
-  const mapInstanceRef  = useRef(null);
-  const markerRef       = useRef(null);
+  const navigate       = useNavigate();
+  const mapRef         = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markerRef      = useRef(null);
 
-  // Load Leaflet dynamically
+  // Load Leaflet dynamically (fix #11: use window.L, not module-level var)
   useEffect(() => {
     if (!document.getElementById("leaflet-css")) {
       const link = document.createElement("link");
@@ -55,42 +57,45 @@ function SignupPage() {
       link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
       document.head.appendChild(link);
     }
-    if (!document.querySelector('script[src*="leaflet"]')) {
+    if (window.L) {
+      setMapReady(true);
+      return;
+    }
+    if (!document.querySelector('script[src*="leaflet@1.9.4"]')) {
       const script   = document.createElement("script");
       script.src     = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-      script.onload  = () => { L = window.L; setMapReady(true); };
+      script.onload  = () => setMapReady(true);
       document.head.appendChild(script);
-    } else {
-      L = window.L;
-      if (L) setMapReady(true);
     }
   }, []);
 
-  // Init map
+  // Init map once Leaflet is ready
   useEffect(() => {
     if (!mapReady || !mapRef.current || mapInstanceRef.current) return;
+    const L = window.L;
 
     const map = L.map(mapRef.current, { center: [48, 10], zoom: 4 });
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       attribution: "© OpenStreetMap contributors © CARTO",
-      subdomains: "abcd", maxZoom: 19,
+      subdomains: "abcd",
+      maxZoom: 19,
     }).addTo(map);
 
     const icon = L.divIcon({
       className: "",
       html: `<div style="width:28px;height:28px;background:#FBB03B;border:3px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 4px 12px rgba(251,176,59,0.5);"></div>`,
-      iconSize: [28, 28], iconAnchor: [14, 28],
+      iconSize: [28, 28],
+      iconAnchor: [14, 28],
     });
 
     map.on("click", (e) => {
       const { lat, lng } = e.latlng;
       const rLat = Math.round(lat * 10000) / 10000;
       const rLng = Math.round(lng * 10000) / 10000;
-      if (markerRef.current) markerRef.current.setLatLng([lat, lng]);
-      else markerRef.current = L.marker([lat, lng], { icon }).addTo(map);
-
+      if (markerRef.current) markerRef.current.setLatLng([rLat, rLng]);
+      else markerRef.current = L.marker([rLat, rLng], { icon }).addTo(map);
       setValues(prev => ({ ...prev, latitude: String(rLat), longitude: String(rLng) }));
-      setErrors(prev => ({ ...prev, latitude: undefined, longitude: undefined }));
+      setErrors(prev => { const n = { ...prev }; delete n.latitude; delete n.longitude; return n; });
       setGlobalError("");
     });
 
@@ -100,7 +105,7 @@ function SignupPage() {
   const handleInput = (e) => {
     const { name, value } = e.target;
     setValues(prev => ({ ...prev, [name]: value }));
-    setErrors(prev => ({ ...prev, [name]: undefined }));
+    setErrors(prev => { const n = { ...prev }; delete n[name]; return n; });
     setGlobalError("");
   };
 
@@ -113,21 +118,26 @@ function SignupPage() {
 
     setLoading(true);
     try {
-      const res = await axios.post("http://localhost:3001/signup", values);
+      const res = await axios.post(`${API_BASE}/signup`, values);
       navigate("/User", {
         state: {
-          userId: res.data.userId,
-          name: values.name,
-          latitude: values.latitude, longitude: values.longitude,
-          declination: values.declination, azimuth: values.azimuth,
-          capacity: values.capacity,
+          userId:      res.data.userId,
+          name:        values.name,
+          email:       values.email,
+          latitude:    values.latitude,
+          longitude:   values.longitude,
+          declination: values.declination,
+          azimuth:     values.azimuth,
+          capacity:    values.capacity,
         },
       });
     } catch (err) {
       const msg = err.response?.data?.error;
       if (msg) {
-        if (msg.toLowerCase().includes("location")) setErrors(prev => ({ ...prev, latitude: msg }));
-        else if (msg.toLowerCase().includes("email")) setErrors(prev => ({ ...prev, email: msg }));
+        if (msg.toLowerCase().includes("location"))
+          setErrors(prev => ({ ...prev, latitude: msg }));
+        else if (msg.toLowerCase().includes("email"))
+          setErrors(prev => ({ ...prev, email: msg }));
         else setGlobalError(msg);
       } else {
         setGlobalError("Something went wrong. Please try again.");
@@ -137,7 +147,6 @@ function SignupPage() {
     }
   };
 
-  // Shared props for Field (avoids re-creating the component)
   const fieldProps = { values, errors, onChange: handleInput };
 
   return (
@@ -172,7 +181,6 @@ function SignupPage() {
             </div>
           </li>
         </ul>
-        {/* Back home button */}
         <Link to="/" className="back-home-btn">← Back to Home</Link>
       </div>
 
@@ -189,17 +197,17 @@ function SignupPage() {
           {/* ACCOUNT */}
           <div className="form-section">
             <div className="form-section-title">👤 Account Details</div>
-            <Field label="Full Name"             name="name"     placeholder="Jane Doe"         {...fieldProps} />
-            <Field label="Email Address"         name="email"    type="email" placeholder="jane@email.com" {...fieldProps} />
-            <Field label="Password (min. 6 chars)" name="password" type="password" placeholder="••••••••"   {...fieldProps} />
+            <Field label="Full Name"               name="name"     placeholder="Jane Doe"            {...fieldProps} />
+            <Field label="Email Address"           name="email"    type="email" placeholder="jane@email.com" {...fieldProps} />
+            <Field label="Password (min. 6 chars)" name="password" type="password" placeholder="••••••••" {...fieldProps} />
           </div>
 
           {/* PV SYSTEM */}
           <div className="form-section">
             <div className="form-section-title">⚡ PV System Configuration</div>
             <div className="form-row">
-              <Field label="Declination (0–90°)"  name="declination" type="number" placeholder="e.g. 35"         {...fieldProps} />
-              <Field label="Azimuth (-180–180°)"  name="azimuth"     type="number" placeholder="e.g. 0 (South)"  {...fieldProps} />
+              <Field label="Declination (0–90°)" name="declination" type="number" placeholder="e.g. 35"        {...fieldProps} />
+              <Field label="Azimuth (-180–180°)" name="azimuth"     type="number" placeholder="e.g. 0 (South)" {...fieldProps} />
             </div>
             <Field label="System Capacity (kWp)" name="capacity" type="number" placeholder="e.g. 5.5" {...fieldProps} />
           </div>

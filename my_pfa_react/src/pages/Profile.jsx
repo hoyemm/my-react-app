@@ -1,39 +1,35 @@
 // src/pages/Profile.jsx
 import { useState, useEffect, useRef } from "react";
-import { useLocation, useNavigate, Link } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import "./Profile.css";
-
-function useTheme() {
-  const [theme, setTheme] = useState(
-    () => localStorage.getItem("pvf-theme") || "dark"
-  );
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem("pvf-theme", theme);
-  }, [theme]);
-  const toggle = () => setTheme(t => (t === "dark" ? "light" : "dark"));
-  return [theme, toggle];
-}
-
-let L = null;
+import { loadSession, saveSession } from "../utils/session";
+import useTheme from "../hooks/useTheme"; // fix #9
+import { API_BASE } from "../api";         // fix #10
 
 export default function Profile() {
   const location = useLocation();
   const navigate = useNavigate();
   const [theme, toggleTheme] = useTheme();
 
-  const existing = location.state || {};
-  const [values, setValues] = useState({
-    name:        existing.name        || "",
-    email:       existing.email       || "",
-    password:    "",
-    declination: existing.declination || "",
-    azimuth:     existing.azimuth     || "",
-    latitude:    existing.latitude    || "",
-    longitude:   existing.longitude   || "",
-    capacity:    existing.capacity    || "",
+  // Fall back to localStorage if navigated to directly
+  const existing = location.state || loadSession() || {};
+
+  const [account, setAccount] = useState({
+    name:     existing.name  || "",
+    email:    existing.email || "",
+    password: "",
   });
+  const [system, setSystem] = useState({
+    declination: String(existing.declination || ""),
+    azimuth:     String(existing.azimuth     || ""),
+    capacity:    String(existing.capacity    || ""),
+  });
+  const [loc, setLoc] = useState({
+    latitude:  String(existing.latitude  || ""),
+    longitude: String(existing.longitude || ""),
+  });
+
   const [errors,      setErrors]      = useState({});
   const [globalError, setGlobalError] = useState("");
   const [success,     setSuccess]     = useState("");
@@ -45,41 +41,49 @@ export default function Profile() {
   const mapInstanceRef = useRef(null);
   const markerRef      = useRef(null);
 
-  // Load Leaflet
+  // Load Leaflet once (fix #11: use window.L)
   useEffect(() => {
     if (!document.getElementById("leaflet-css")) {
       const link = document.createElement("link");
-      link.id   = "leaflet-css";
-      link.rel  = "stylesheet";
+      link.id = "leaflet-css"; link.rel = "stylesheet";
       link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
       document.head.appendChild(link);
     }
-    if (!document.querySelector('script[src*="leaflet"]')) {
-      const script  = document.createElement("script");
-      script.src    = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-      script.onload = () => { L = window.L; setMapReady(true); };
+    if (window.L) { setMapReady(true); return; }
+    if (!document.querySelector('script[src*="leaflet@1.9.4"]')) {
+      const script = document.createElement("script");
+      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      script.onload = () => setMapReady(true);
       document.head.appendChild(script);
-    } else {
-      L = window.L;
-      if (L) setMapReady(true);
     }
   }, []);
 
-  // Init map when location tab is active
+  // Init / re-init map when the location tab becomes active (fix #8)
+  // We reset mapInstanceRef when the tab is left so the map re-initialises
+  // correctly if the DOM node has been recreated.
   useEffect(() => {
-    if (activeTab !== "location") return;
-    if (!mapReady) return;
-    // small delay so the tab panel has rendered
+    if (activeTab !== "location" || !mapReady) return;
+
+    // Small delay so the DOM node is painted before Leaflet measures it
     const t = setTimeout(() => {
-      if (!mapRef.current || mapInstanceRef.current) return;
+      if (!mapRef.current) return;
 
-      const initLat = parseFloat(values.latitude) || 36;
-      const initLng = parseFloat(values.longitude) || 10;
+      // If a previous instance exists but the container was re-created
+      // (React unmounted + remounted the conditional JSX), the old instance
+      // points to a detached node. Destroy it and start fresh.
+      if (mapInstanceRef.current) {
+        try { mapInstanceRef.current.remove(); } catch (_) { /* ignore */ }
+        mapInstanceRef.current = null;
+        markerRef.current      = null;
+      }
 
-      const map = L.map(mapRef.current, { center: [initLat, initLng], zoom: 6 });
+      const L    = window.L;
+      const iLat = parseFloat(loc.latitude)  || 36;
+      const iLng = parseFloat(loc.longitude) || 10;
+      const map  = L.map(mapRef.current, { center: [iLat, iLng], zoom: 6 });
+
       L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        attribution: "© OpenStreetMap © CARTO",
-        subdomains: "abcd", maxZoom: 19,
+        attribution: "© OpenStreetMap © CARTO", subdomains: "abcd", maxZoom: 19,
       }).addTo(map);
 
       const icon = L.divIcon({
@@ -88,95 +92,111 @@ export default function Profile() {
         iconSize: [28, 28], iconAnchor: [14, 28],
       });
 
-      // Place existing marker
-      if (values.latitude && values.longitude) {
-        markerRef.current = L.marker([initLat, initLng], { icon }).addTo(map);
-      }
+      if (loc.latitude && loc.longitude)
+        markerRef.current = L.marker([iLat, iLng], { icon }).addTo(map);
 
-      map.on("click", (e) => {
-        const { lat, lng } = e.latlng;
-        const rLat = Math.round(lat * 10000) / 10000;
-        const rLng = Math.round(lng * 10000) / 10000;
-        if (markerRef.current) markerRef.current.setLatLng([lat, lng]);
-        else markerRef.current = L.marker([lat, lng], { icon }).addTo(map);
-        setValues(prev => ({ ...prev, latitude: String(rLat), longitude: String(rLng) }));
-        setErrors(prev => ({ ...prev, latitude: undefined, longitude: undefined }));
+      map.on("click", e => {
+        const rLat = Math.round(e.latlng.lat * 10000) / 10000;
+        const rLng = Math.round(e.latlng.lng * 10000) / 10000;
+        if (markerRef.current) markerRef.current.setLatLng([rLat, rLng]);
+        else markerRef.current = L.marker([rLat, rLng], { icon }).addTo(map);
+        setLoc({ latitude: String(rLat), longitude: String(rLng) });
+        setErrors(p => { const n = { ...p }; delete n.latitude; return n; });
       });
 
       mapInstanceRef.current = map;
     }, 80);
-    return () => clearTimeout(t);
-  }, [activeTab, mapReady]);
 
-  const handleInput = (e) => {
-    const { name, value } = e.target;
-    setValues(prev => ({ ...prev, [name]: value }));
-    setErrors(prev => ({ ...prev, [name]: undefined }));
-    setGlobalError("");
-    setSuccess("");
+    return () => {
+      clearTimeout(t);
+      // Fix #8: when leaving the location tab, destroy the Leaflet instance so
+      // the next visit re-creates it against the fresh DOM node.
+      if (mapInstanceRef.current) {
+        try { mapInstanceRef.current.remove(); } catch (_) { /* ignore */ }
+        mapInstanceRef.current = null;
+        markerRef.current      = null;
+      }
+    };
+  }, [activeTab, mapReady]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const switchTab = id => {
+    setErrors({}); setGlobalError(""); setSuccess(""); setActiveTab(id);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setGlobalError("");
-    setSuccess("");
-
-    // Basic validation
+  const handleSave = async () => {
+    setErrors({}); setGlobalError(""); setSuccess("");
     const errs = {};
-    if (!values.name.trim())  errs.name  = "Name is required";
-    if (!values.email.trim()) errs.email = "Email is required";
-    if (values.password && values.password.length < 6) errs.password = "Password must be at least 6 characters";
-    const dec = parseFloat(values.declination);
-    const az  = parseFloat(values.azimuth);
-    const cap = parseFloat(values.capacity);
-    if (isNaN(dec) || dec < 0 || dec > 90)    errs.declination = "Must be 0–90°";
-    if (isNaN(az)  || az < -180 || az > 180)  errs.azimuth     = "Must be -180–180°";
-    if (isNaN(cap) || cap <= 0)                errs.capacity    = "Must be a positive number";
-    if (!values.latitude || !values.longitude) errs.latitude    = "Please set a location on the map";
 
+    if (activeTab === "account") {
+      if (!account.name.trim())  errs.name  = "Name is required";
+      if (!account.email.trim()) errs.email = "Email is required";
+      if (account.password && account.password.length < 6)
+        errs.password = "Min. 6 characters";
+    }
+    if (activeTab === "system") {
+      const dec = parseFloat(system.declination);
+      const az  = parseFloat(system.azimuth);
+      const cap = parseFloat(system.capacity);
+      if (isNaN(dec) || dec < 0 || dec > 90)   errs.declination = "Must be 0–90°";
+      if (isNaN(az)  || az < -180 || az > 180) errs.azimuth     = "Must be −180–180°";
+      if (isNaN(cap) || cap <= 0)               errs.capacity    = "Must be a positive number";
+    }
+    if (activeTab === "location") {
+      if (!loc.latitude || !loc.longitude) errs.latitude = "Please set a location on the map";
+    }
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
     setLoading(true);
     try {
-      const payload = { ...values };
-      if (!payload.password) delete payload.password; // don't send empty password
-      await axios.put(`http://localhost:3001/users/${existing.userId}`, payload);
-      setSuccess("Profile updated successfully!");
-      // Navigate back to dashboard with updated state
-      setTimeout(() => {
-        navigate("/User", {
-          state: {
-            userId:      existing.userId,
-            name:        values.name,
-            latitude:    values.latitude,
-            longitude:   values.longitude,
-            declination: values.declination,
-            azimuth:     values.azimuth,
-            capacity:    values.capacity,
-          }
-        });
-      }, 1200);
+      let payload = {};
+      if (activeTab === "account") {
+        payload = { name: account.name, email: account.email };
+        if (account.password) payload.password = account.password;
+      }
+      if (activeTab === "system") {
+        payload = {
+          declination: system.declination,
+          azimuth:     system.azimuth,
+          capacity:    system.capacity,
+        };
+      }
+      if (activeTab === "location") {
+        payload = { latitude: loc.latitude, longitude: loc.longitude };
+      }
+
+      const res = await axios.put(`${API_BASE}/users/${existing.userId}`, payload);
+
+      const updatedUser = {
+        userId:      existing.userId,
+        name:        res.data.name        ?? account.name,
+        email:       res.data.email       ?? account.email,
+        latitude:    res.data.latitude    ?? loc.latitude,
+        longitude:   res.data.longitude   ?? loc.longitude,
+        declination: res.data.declination ?? system.declination,
+        azimuth:     res.data.azimuth     ?? system.azimuth,
+        capacity:    res.data.capacity    ?? system.capacity,
+      };
+      saveSession(updatedUser);
+
+      setSuccess("✓ Saved! Returning to dashboard…");
+      if (activeTab === "account") setAccount(p => ({ ...p, password: "" }));
+
+      setTimeout(() => navigate("/User", { state: updatedUser }), 1000);
     } catch (err) {
-      const msg = err.response?.data?.error;
-      setGlobalError(msg || "Something went wrong. Please try again.");
+      setGlobalError(
+        err.response?.data?.error || "Something went wrong. Please try again."
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const initials = values.name
-    ? values.name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2)
+  const initials = account.name
+    ? account.name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2)
     : "U";
-
-  const tabs = [
-    { id: "account",  label: "👤 Account",  },
-    { id: "system",   label: "⚡ PV System", },
-    { id: "location", label: "📍 Location",  },
-  ];
 
   return (
     <div className="profile-page">
-      {/* TOPBAR */}
       <header className="profile-topbar">
         <div className="profile-topbar-left">
           <span className="topbar-logo">☀️ PVForecast</span>
@@ -184,13 +204,14 @@ export default function Profile() {
           <span className="topbar-title">Edit Profile</span>
         </div>
         <div className="profile-topbar-right">
+          {/* fix #2: shared .theme-toggle class */}
           <button className="theme-toggle" onClick={toggleTheme} type="button">
             {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
           </button>
           <button
             className="profile-back-btn"
-            onClick={() => navigate("/User", { state: existing })}
             type="button"
+            onClick={() => navigate("/User", { state: existing })}
           >
             ← Dashboard
           </button>
@@ -198,215 +219,224 @@ export default function Profile() {
       </header>
 
       <div className="profile-content">
-        {/* SIDEBAR */}
         <aside className="profile-sidebar">
           <div className="profile-avatar-block">
             <div className="profile-avatar-lg">{initials}</div>
-            <div className="profile-avatar-name">{values.name || "Your Name"}</div>
+            <div className="profile-avatar-name">{account.name || "Your Name"}</div>
             <div className="profile-avatar-sub">PVForecast Member</div>
           </div>
-
           <nav className="profile-nav">
-            {tabs.map(tab => (
+            {[
+              { id: "account",  label: "👤 Account"  },
+              { id: "system",   label: "⚡ PV System" },
+              { id: "location", label: "📍 Location"  },
+            ].map(tab => (
               <button
                 key={tab.id}
                 className={`profile-nav-item ${activeTab === tab.id ? "active" : ""}`}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => switchTab(tab.id)}
                 type="button"
               >
                 {tab.label}
               </button>
             ))}
           </nav>
-
           <div className="profile-system-summary">
             <div className="pss-label">Current System</div>
             {[
-              ["📍", `${existing.latitude || "—"}°, ${existing.longitude || "—"}°`],
-              ["↕️", `Declination ${existing.declination || "—"}°`],
-              ["↔️", `Azimuth ${existing.azimuth || "—"}°`],
-              ["🔋", `${existing.capacity || "—"} kWp`],
+              ["📍", `${loc.latitude  || existing.latitude  || "—"}°, ${loc.longitude || existing.longitude || "—"}°`],
+              ["↕️", `Declination ${system.declination || existing.declination || "—"}°`],
+              ["↔️", `Azimuth ${system.azimuth || existing.azimuth || "—"}°`],
+              ["🔋", `${system.capacity || existing.capacity || "—"} kWp`],
             ].map(([icon, text]) => (
-              <div className="pss-row" key={text}>
-                <span>{icon}</span>
-                <span>{text}</span>
-              </div>
+              <div className="pss-row" key={text}><span>{icon}</span><span>{text}</span></div>
             ))}
           </div>
         </aside>
 
-        {/* MAIN FORM */}
         <main className="profile-main">
-          {globalError && (
-            <div className="profile-alert error">⚠ {globalError}</div>
-          )}
-          {success && (
-            <div className="profile-alert success">✓ {success}</div>
-          )}
+          {globalError && <div className="profile-alert error">⚠ {globalError}</div>}
+          {success     && <div className="profile-alert success">{success}</div>}
 
-          <form onSubmit={handleSubmit} noValidate>
-
-            {/* ── ACCOUNT TAB ── */}
-            {activeTab === "account" && (
-              <div className="profile-section">
-                <div className="profile-section-title">👤 Account Details</div>
-                <p className="profile-section-sub">Update your name, email, or password.</p>
-
-                <div className="pf-group">
-                  <label>Full Name</label>
-                  <input
-                    name="name" value={values.name}
-                    onChange={handleInput}
-                    className={errors.name ? "error" : ""}
-                    placeholder="Jane Doe"
-                  />
-                  {errors.name && <span className="pf-error">⚠ {errors.name}</span>}
-                </div>
-
-                <div className="pf-group">
-                  <label>Email Address</label>
-                  <input
-                    type="email" name="email" value={values.email}
-                    onChange={handleInput}
-                    className={errors.email ? "error" : ""}
-                    placeholder="jane@email.com"
-                  />
-                  {errors.email && <span className="pf-error">⚠ {errors.email}</span>}
-                </div>
-
-                <div className="pf-group">
-                  <label>New Password <span className="pf-optional">(leave blank to keep current)</span></label>
-                  <input
-                    type="password" name="password" value={values.password}
-                    onChange={handleInput}
-                    className={errors.password ? "error" : ""}
-                    placeholder="••••••••"
-                    autoComplete="new-password"
-                  />
-                  {errors.password && <span className="pf-error">⚠ {errors.password}</span>}
-                </div>
+          {/* ── ACCOUNT TAB ── */}
+          {activeTab === "account" && (
+            <div className="profile-section">
+              <div className="profile-section-title">👤 Account Details</div>
+              <p className="profile-section-sub">Update your name, email address, or password.</p>
+              <div className="pf-group">
+                <label>Full Name</label>
+                <input
+                  value={account.name}
+                  placeholder="Jane Doe"
+                  className={errors.name ? "error" : ""}
+                  onChange={e => {
+                    setAccount(p => ({ ...p, name: e.target.value }));
+                    setErrors(p => { const n = { ...p }; delete n.name; return n; });
+                  }}
+                />
+                {errors.name && <span className="pf-error">⚠ {errors.name}</span>}
               </div>
-            )}
-
-            {/* ── SYSTEM TAB ── */}
-            {activeTab === "system" && (
-              <div className="profile-section">
-                <div className="profile-section-title">⚡ PV System Configuration</div>
-                <p className="profile-section-sub">Adjust your panel parameters to fine-tune forecast accuracy.</p>
-
-                <div className="pf-row">
-                  <div className="pf-group">
-                    <label>Declination (0–90°)</label>
-                    <input
-                      type="number" name="declination" value={values.declination}
-                      onChange={handleInput}
-                      className={errors.declination ? "error" : ""}
-                      placeholder="e.g. 35"
-                    />
-                    {errors.declination && <span className="pf-error">⚠ {errors.declination}</span>}
-                  </div>
-                  <div className="pf-group">
-                    <label>Azimuth (-180–180°)</label>
-                    <input
-                      type="number" name="azimuth" value={values.azimuth}
-                      onChange={handleInput}
-                      className={errors.azimuth ? "error" : ""}
-                      placeholder="e.g. 0 (South)"
-                    />
-                    {errors.azimuth && <span className="pf-error">⚠ {errors.azimuth}</span>}
-                  </div>
-                </div>
-
-                <div className="pf-group">
-                  <label>System Capacity (kWp)</label>
-                  <input
-                    type="number" name="capacity" value={values.capacity}
-                    onChange={handleInput}
-                    className={errors.capacity ? "error" : ""}
-                    placeholder="e.g. 5.5"
-                  />
-                  {errors.capacity && <span className="pf-error">⚠ {errors.capacity}</span>}
-                </div>
-
-                <div className="pf-info-card">
-                  <div className="pf-info-title">💡 Tips</div>
-                  <ul>
-                    <li><strong>Declination</strong> — angle of panels from horizontal (0° = flat, 90° = vertical)</li>
-                    <li><strong>Azimuth</strong> — compass direction panels face (0° = South, -90° = East, 90° = West)</li>
-                    <li><strong>Capacity</strong> — total installed DC power of your array in kilowatt-peak</li>
-                  </ul>
-                </div>
+              <div className="pf-group">
+                <label>Email Address</label>
+                <input
+                  type="email"
+                  value={account.email}
+                  placeholder="jane@email.com"
+                  className={errors.email ? "error" : ""}
+                  onChange={e => {
+                    setAccount(p => ({ ...p, email: e.target.value }));
+                    setErrors(p => { const n = { ...p }; delete n.email; return n; });
+                  }}
+                />
+                {errors.email && <span className="pf-error">⚠ {errors.email}</span>}
               </div>
-            )}
-
-            {/* ── LOCATION TAB ── */}
-            {activeTab === "location" && (
-              <div className="profile-section">
-                <div className="profile-section-title">📍 Installation Location</div>
-                <p className="profile-section-sub">Click the map to update your panel's location.</p>
-
-                <p className="map-hint">🖱 Click on the map to move your location pin</p>
-
-                <div className="map-wrapper" ref={mapRef}>
-                  {!mapReady && (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)", fontSize: "0.9rem" }}>
-                      Loading map…
-                    </div>
-                  )}
-                </div>
-
-                <div className="coords-display">
-                  <div className="coord-pill">
-                    <label>Latitude</label>
-                    <span>{values.latitude || "—"}</span>
-                  </div>
-                  <div className="coord-pill">
-                    <label>Longitude</label>
-                    <span>{values.longitude || "—"}</span>
-                  </div>
-                </div>
-
-                {errors.latitude && (
-                  <div className="pf-error" style={{ marginBottom: 12 }}>⚠ {errors.latitude}</div>
-                )}
-
-                <p className="map-hint" style={{ marginTop: 4 }}>💡 Or enter coordinates manually</p>
-                <div className="pf-row">
-                  <div className="pf-group">
-                    <label>Latitude</label>
-                    <input
-                      type="number" name="latitude" value={values.latitude}
-                      onChange={handleInput}
-                      className={errors.latitude ? "error" : ""}
-                      placeholder="e.g. 36.8"
-                    />
-                  </div>
-                  <div className="pf-group">
-                    <label>Longitude</label>
-                    <input
-                      type="number" name="longitude" value={values.longitude}
-                      onChange={handleInput}
-                      className={errors.longitude ? "error" : ""}
-                      placeholder="e.g. 10.1"
-                    />
-                  </div>
-                </div>
+              <div className="pf-group">
+                <label>
+                  New Password{" "}
+                  <span className="pf-optional">(leave blank to keep current)</span>
+                </label>
+                <input
+                  type="password"
+                  value={account.password}
+                  placeholder="••••••••"
+                  autoComplete="new-password"
+                  className={errors.password ? "error" : ""}
+                  onChange={e => {
+                    setAccount(p => ({ ...p, password: e.target.value }));
+                    setErrors(p => { const n = { ...p }; delete n.password; return n; });
+                  }}
+                />
+                {errors.password && <span className="pf-error">⚠ {errors.password}</span>}
               </div>
-            )}
-
-            <div className="profile-form-footer">
-              <button
-                type="button"
-                className="profile-cancel-btn"
-                onClick={() => navigate("/User", { state: existing })}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="profile-save-btn" disabled={loading}>
-                {loading ? "⏳ Saving…" : "💾 Save Changes"}
-              </button>
             </div>
-          </form>
+          )}
+
+          {/* ── SYSTEM TAB ── */}
+          {activeTab === "system" && (
+            <div className="profile-section">
+              <div className="profile-section-title">⚡ PV System Configuration</div>
+              <p className="profile-section-sub">
+                Change your panel specs — no email or password needed here.
+              </p>
+              <div className="pf-row">
+                <div className="pf-group">
+                  <label>Declination (0–90°)</label>
+                  <input
+                    type="number"
+                    value={system.declination}
+                    placeholder="e.g. 35"
+                    className={errors.declination ? "error" : ""}
+                    onChange={e => {
+                      setSystem(p => ({ ...p, declination: e.target.value }));
+                      setErrors(p => { const n = { ...p }; delete n.declination; return n; });
+                    }}
+                  />
+                  {errors.declination && <span className="pf-error">⚠ {errors.declination}</span>}
+                </div>
+                <div className="pf-group">
+                  <label>Azimuth (−180–180°)</label>
+                  <input
+                    type="number"
+                    value={system.azimuth}
+                    placeholder="e.g. 0 (South)"
+                    className={errors.azimuth ? "error" : ""}
+                    onChange={e => {
+                      setSystem(p => ({ ...p, azimuth: e.target.value }));
+                      setErrors(p => { const n = { ...p }; delete n.azimuth; return n; });
+                    }}
+                  />
+                  {errors.azimuth && <span className="pf-error">⚠ {errors.azimuth}</span>}
+                </div>
+              </div>
+              <div className="pf-group">
+                <label>System Capacity (kWp)</label>
+                <input
+                  type="number"
+                  value={system.capacity}
+                  placeholder="e.g. 5.5"
+                  className={errors.capacity ? "error" : ""}
+                  onChange={e => {
+                    setSystem(p => ({ ...p, capacity: e.target.value }));
+                    setErrors(p => { const n = { ...p }; delete n.capacity; return n; });
+                  }}
+                />
+                {errors.capacity && <span className="pf-error">⚠ {errors.capacity}</span>}
+              </div>
+              <div className="pf-info-card">
+                <div className="pf-info-title">💡 Tips</div>
+                <ul>
+                  <li><strong>Declination</strong> — tilt from horizontal (0° = flat, 90° = vertical)</li>
+                  <li><strong>Azimuth</strong> — panel direction (0° = South, −90° = East, +90° = West)</li>
+                  <li><strong>Capacity</strong> — total installed DC peak power in kWp</li>
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {/* ── LOCATION TAB ── */}
+          {activeTab === "location" && (
+            <div className="profile-section">
+              <div className="profile-section-title">📍 Installation Location</div>
+              <p className="profile-section-sub">
+                Click the map or enter coordinates to update your site.
+              </p>
+              <p className="map-hint">🖱 Click on the map to place your pin</p>
+              {/* map-wrapper is always rendered while on this tab so the ref stays valid */}
+              <div className="map-wrapper" ref={mapRef}>
+                {!mapReady && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)", fontSize: "0.9rem" }}>
+                    Loading map…
+                  </div>
+                )}
+              </div>
+              <div className="coords-display">
+                <div className="coord-pill"><label>Latitude</label><span>{loc.latitude || "—"}</span></div>
+                <div className="coord-pill"><label>Longitude</label><span>{loc.longitude || "—"}</span></div>
+              </div>
+              {errors.latitude && (
+                <div className="pf-error" style={{ marginBottom: 12 }}>⚠ {errors.latitude}</div>
+              )}
+              <p className="map-hint" style={{ marginTop: 4 }}>💡 Or enter manually</p>
+              <div className="pf-row">
+                <div className="pf-group">
+                  <label>Latitude</label>
+                  <input
+                    type="number"
+                    value={loc.latitude}
+                    placeholder="e.g. 36.8"
+                    onChange={e => setLoc(p => ({ ...p, latitude: e.target.value }))}
+                  />
+                </div>
+                <div className="pf-group">
+                  <label>Longitude</label>
+                  <input
+                    type="number"
+                    value={loc.longitude}
+                    placeholder="e.g. 10.1"
+                    onChange={e => setLoc(p => ({ ...p, longitude: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="profile-form-footer">
+            <button
+              type="button"
+              className="profile-cancel-btn"
+              onClick={() => navigate("/User", { state: existing })}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="profile-save-btn"
+              onClick={handleSave}
+              disabled={loading}
+            >
+              {loading ? "⏳ Saving…" : "💾 Save Changes"}
+            </button>
+          </div>
         </main>
       </div>
     </div>

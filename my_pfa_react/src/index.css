@@ -12,8 +12,8 @@
   --border:       rgba(255,255,255,0.08);
   --border-accent:rgba(251,176,59,0.3);
 
-  --amber:        #FBB03B;
-  --amber-light:  #fdc96e;
+  --amber:        #53ab23;
+  --amber-light:  #2abc47;
   --amber-dim:    rgba(251,176,59,0.15);
   --green:        #4ade80;
   --green-dim:    rgba(74,222,128,0.15);
@@ -51,8 +51,8 @@
   --border:       rgba(0,0,0,0.1);
   --border-accent:rgba(200,120,10,0.35);
 
-  --amber:        #c87800;
-  --amber-light:  #e08c00;
+  --amber:        #53ab23;
+  --amber-light:  #2abc47;
   --amber-dim:    rgba(200,120,10,0.12);
   --green:        #16a34a;
   --green-dim:    rgba(22,163,74,0.12);

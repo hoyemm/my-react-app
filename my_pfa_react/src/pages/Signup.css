@@ -10,17 +10,55 @@
 
 /* ── LEFT PANEL ── */
 .signup-left {
-  background: var(--bg2);
-  border-right: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 60px 50px;
-  position: sticky;
-  top: 0;
-  height: 100vh;
   gap: 0;
+  /* solar panel photo — blurred + darkened */
+  background-image: url('https://images.unsplash.com/photo-1509391366360-2e959784a276?w=1200&q=80&auto=format&fit=crop');
+  background-size: cover;
+  background-position: center 40%;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+}
+
+/* dark overlay so card content stays legible */
+.signup-left::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 8, 16, 0.72);
+  backdrop-filter: blur(10px) saturate(0.7);
+  -webkit-backdrop-filter: blur(10px) saturate(0.7);
+  z-index: 0;
+}
+
+/* warm amber radial glow — matches Login page */
+.signup-left::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 70% 50% at 50% 0%,
+    rgba(251, 176, 59, 0.18) 0%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* all direct children must stack above the overlays */
+.signup-left > * {
+  position: relative;
+  z-index: 1;
+}
+
+[data-theme="light"] .signup-left::before {
+  background: rgba(8, 12, 24, 0.60);
 }
 
 .signup-brand {
@@ -34,9 +72,10 @@
   font-weight: 900;
   letter-spacing: -0.5px;
   margin-bottom: 8px;
-  color: var(--text);
+  /* always light — left panel is always over dark photo */
+  color: #edf0f8;
 }
-.signup-brand p { color: var(--text-muted); font-size: 0.95rem; }
+.signup-brand p { color: rgba(255,255,255,0.55); font-size: 0.95rem; }
 
 .benefits-list {
   list-style: none;
@@ -52,21 +91,23 @@
   align-items: flex-start;
   gap: 14px;
   padding: 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: var(--radius-sm);
   font-size: 0.9rem;
   transition: border-color 0.2s;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
-.benefits-list li:hover { border-color: var(--border-accent); }
+.benefits-list li:hover { border-color: rgba(251,176,59,0.45); }
 .benefits-list li .icon { font-size: 1.3rem; flex-shrink: 0; }
 .benefits-list li strong {
   display: block;
   margin-bottom: 3px;
   font-weight: 700;
-  color: var(--text);
+  color: #edf0f8;
 }
-.benefits-list li span { color: var(--text-muted); font-size: 0.82rem; }
+.benefits-list li span { color: rgba(255,255,255,0.52); font-size: 0.82rem; }
 
 /* Back home button */
 .back-home-btn {
@@ -75,17 +116,20 @@
   gap: 6px;
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--text-muted);
-  border: 1px solid var(--border);
+  color: rgba(255,255,255,0.5);
+  border: 1px solid rgba(255,255,255,0.15);
   border-radius: 100px;
   padding: 8px 20px;
-  background: var(--surface);
+  background: rgba(255,255,255,0.07);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   transition: all 0.2s;
   margin-top: auto;
 }
 .back-home-btn:hover {
   color: var(--amber);
   border-color: var(--amber);
+  background: rgba(251,176,59,0.1);
 }
 
 /* ── RIGHT PANEL ── */
