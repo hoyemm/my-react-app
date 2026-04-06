@@ -1,4 +1,10 @@
-// src/pages/User.jsx
+// src/pages/User.jsx  — MERGED VERSION
+// New features vs original:
+//   1. Live clock in topbar
+//   2. Unit selector on chart axes (W/kW for power, Wh/kWh for energy)
+//   3. "Download Today's Data" button → CSV export
+//   4. Reviews section (GET/POST /feedback)
+
 import { useEffect, useState, useRef } from "react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -11,7 +17,7 @@ import { loadSession, saveSession, clearSession } from "../utils/session";
 import useTheme from "../hooks/useTheme";
 import { API_BASE } from "../api";
 
-/* ── helpers ── */
+/* ─── helpers ──────────────────────────────────────────────────── */
 function fmtUpdated(ts) {
   if (!ts) return "";
   return new Date(ts).toLocaleString("en-US", {
@@ -33,7 +39,26 @@ function wxDesc(clouds) {
   return "Overcast";
 }
 
-/* ── recharts tooltip ── */
+/* ─── live clock ────────────────────────────────────────────────── */
+function LiveClock() {
+  const [time, setTime] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const hh = String(time.getHours()).padStart(2, "0");
+  const mm = String(time.getMinutes()).padStart(2, "0");
+  const ss = String(time.getSeconds()).padStart(2, "0");
+  return (
+    <div className="live-clock">
+      <span className="clock-dot" />
+      <span className="clock-hhmm">{hh}:{mm}</span>
+      <span className="clock-ss">:{ss}</span>
+    </div>
+  );
+}
+
+/* ─── recharts tooltip ──────────────────────────────────────────── */
 const CustomTooltip = ({ active, payload, label, unit }) => {
   if (!active || !payload?.length) return null;
   return (
@@ -44,7 +69,7 @@ const CustomTooltip = ({ active, payload, label, unit }) => {
   );
 };
 
-/* ── user avatar dropdown ── */
+/* ─── user avatar dropdown ──────────────────────────────────────── */
 function UserMenu({ name, onProfile, onLogout }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -87,9 +112,7 @@ function UserMenu({ name, onProfile, onLogout }) {
   );
 }
 
-/* ══════════════════════════════════════════════
-   WEATHER SECTION
-══════════════════════════════════════════════ */
+/* ─── weather section (unchanged) ──────────────────────────────── */
 function WeatherSection({ userId, latitude, longitude }) {
   const [wx,        setWx]        = useState(null);
   const [status,    setStatus]    = useState("loading");
@@ -211,6 +234,201 @@ function WeatherSection({ userId, latitude, longitude }) {
   );
 }
 
+/* ─── NEW: Unit selector component ─────────────────────────────── */
+function UnitSelector({ label, options, value, onChange }) {
+  return (
+    <div className="unit-selector">
+      <span className="unit-selector-label">{label}</span>
+      {options.map(opt => (
+        <button
+          key={opt.value}
+          className={`unit-btn ${value === opt.value ? "active" : ""}`}
+          onClick={() => onChange(opt.value)}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ─── NEW: Download CSV helper ──────────────────────────────────── */
+function downloadCSV(powerData, energyData, cumulativeData, date, user) {
+  const meta = [
+    ["# PVForecast — Solar Production Data"],
+    ["# Generated", new Date().toLocaleString()],
+    ["# Date", date],
+    ["# Name", user?.name || ""],
+    ["# Email", user?.email || ""],
+    ["# Latitude", user?.latitude || ""],
+    ["# Longitude", user?.longitude || ""],
+    ["# Declination_deg", user?.declination || ""],
+    ["# Azimuth_deg", user?.azimuth || ""],
+    ["# Capacity_kWp", user?.capacity || ""],
+    [],
+    ["time", "power_W", "energy_kWh", "cumulative_kWh"],
+  ];
+  const maxLen = Math.max(powerData.length, energyData.length, cumulativeData.length);
+  const rows = [];
+  for (let i = 0; i < maxLen; i++) {
+    rows.push([
+      powerData[i]?.time       ?? energyData[i]?.time ?? cumulativeData[i]?.time ?? "",
+      powerData[i]?.value      ?? "",
+      energyData[i]?.value     ?? "",
+      cumulativeData[i]?.value ?? "",
+    ]);
+  }
+  const csv = [...meta, ...rows].map(r => r.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.download = `pvforecast_${date}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ─── NEW: Stars display ─────────────────────────────────────────── */
+function Stars({ rating, interactive = false, onSelect }) {
+  return (
+    <div className="stars">
+      {[1, 2, 3, 4, 5].map(n => (
+        <span
+          key={n}
+          className={`star ${n <= rating ? "filled" : ""} ${interactive ? "interactive" : ""}`}
+          onClick={() => interactive && onSelect(n)}
+        >★</span>
+      ))}
+    </div>
+  );
+}
+
+/* ─── NEW: Reviews section ──────────────────────────────────────── */
+function ReviewsSection() {
+  const [reviews, setReviews]   = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm]         = useState({ name: "", rating: 5, comment: "" });
+  const [submitted, setSubmitted] = useState(false);
+
+  const fetchReviews = () => {
+    setLoading(true);
+    axios.get(`${API_BASE}/feedback`)
+      .then(res => setReviews(res.data))
+      .catch(() => setReviews([]))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchReviews(); }, []);
+
+  const handleSubmit = async () => {
+    if (!form.comment.trim()) return;
+    setSubmitting(true);
+    try {
+      await axios.post(`${API_BASE}/feedback`, form);
+      setSubmitted(true);
+      setShowForm(false);
+      fetchReviews();
+    } catch {
+      alert("Failed to submit review. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const avgRating = reviews.length
+    ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
+    : null;
+
+  return (
+    <div className="reviews-section">
+      <div className="reviews-header">
+        <div>
+          <div className="reviews-title">💬 User Reviews</div>
+          {avgRating && (
+            <div className="reviews-avg">
+              <Stars rating={Math.round(avgRating)} />
+              <span className="avg-score">{avgRating} / 5</span>
+              <span className="avg-count">({reviews.length} review{reviews.length !== 1 ? "s" : ""})</span>
+            </div>
+          )}
+        </div>
+        {!submitted && (
+          <button className="btn-review-toggle" onClick={() => setShowForm(f => !f)}>
+            {showForm ? "✕ Cancel" : "✏️ Write a review"}
+          </button>
+        )}
+      </div>
+
+      {/* Review form */}
+      {showForm && (
+        <div className="review-form">
+          <div className="rf-row">
+            <div className="rf-group">
+              <label>Your name (optional)</label>
+              <input
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="Anonymous"
+              />
+            </div>
+            <div className="rf-group">
+              <label>Rating</label>
+              <Stars rating={form.rating} interactive onSelect={r => setForm(f => ({ ...f, rating: r }))} />
+            </div>
+          </div>
+          <div className="rf-group">
+            <label>Your review</label>
+            <textarea
+              value={form.comment}
+              onChange={e => setForm(f => ({ ...f, comment: e.target.value }))}
+              rows={4}
+              placeholder="Share your experience with PVForecast…"
+            />
+          </div>
+          <button
+            className="rf-submit"
+            onClick={handleSubmit}
+            disabled={submitting || !form.comment.trim()}
+          >
+            {submitting ? "Submitting…" : "Submit Review →"}
+          </button>
+        </div>
+      )}
+
+      {submitted && (
+        <div className="review-thanks">
+          <span>✓</span> Thanks for your review! It's now visible to everyone.
+        </div>
+      )}
+
+      {/* Reviews list */}
+      {loading ? (
+        <div className="wx-loading"><div className="wx-spinner" /><span>Loading reviews…</span></div>
+      ) : reviews.length === 0 ? (
+        <div className="reviews-empty">No reviews yet — be the first!</div>
+      ) : (
+        <div className="reviews-list">
+          {reviews.map((r, i) => (
+            <div className="review-card" key={i}>
+              <div className="rc-top">
+                <div className="rc-avatar">{r.name?.[0]?.toUpperCase() || "A"}</div>
+                <div>
+                  <div className="rc-name">{r.name || "Anonymous"}</div>
+                  <Stars rating={r.rating} />
+                </div>
+                <span className="rc-date">{r.date}</span>
+              </div>
+              {r.comment && <p className="rc-comment">{r.comment}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ══════════════════════════════════════════════
    MAIN DASHBOARD
 ══════════════════════════════════════════════ */
@@ -218,7 +436,6 @@ export default function User() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // ── All hooks BEFORE any early return (Rules of Hooks) ──
   const [user, setUser] = useState(() => location.state || loadSession());
 
   const [todayData,    setTodayData]    = useState({ power: [], energy: [], cumulative: [] });
@@ -229,24 +446,18 @@ export default function User() {
   const [forecastUpdatedAt, setForecastUpdatedAt] = useState(null);
   const [theme, toggleTheme] = useTheme();
 
+  // NEW: unit state
+  const [powerUnit,  setPowerUnit]  = useState("W");   // "W" | "kW"
+  const [energyUnit, setEnergyUnit] = useState("kWh"); // "Wh" | "kWh"
+
   // Redirect if no session
   useEffect(() => {
     if (!user) { navigate("/Login", { replace: true }); return; }
-    // Re-fetch fresh user data from DB on every mount so that returning from
-    // the Home page (which doesn't carry state) still has a valid session.
     axios.get(`${API_BASE}/me/${user.userId}`)
-      .then(res => {
-        const fresh = res.data;
-        saveSession(fresh);
-        setUser(fresh);
-      })
-      .catch(() => {
-        // Network error — fall back to what we already have in localStorage
-        // Don't log out the user just because /me failed
-      });
+      .then(res => { saveSession(res.data); setUser(res.data); })
+      .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch forecast whenever user params are known
   useEffect(() => {
     if (!user) return;
     const { userId, latitude, longitude, declination, azimuth, capacity } = user;
@@ -283,11 +494,23 @@ export default function User() {
 
   if (!user) return null;
 
-  const { userId, name, email, latitude, longitude, declination, azimuth, capacity } = user;
+  const { userId, name, latitude, longitude, declination, azimuth, capacity } = user;
   const todayDate    = new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
   const tomorrowDate = new Date(Date.now() + 86_400_000).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
-  const data     = activeDay === "today" ? todayData : tomorrowData;
-  const dayLabel = activeDay === "today" ? "Today" : "Tomorrow";
+  const todayISO     = new Date().toISOString().slice(0, 10);
+  const data         = activeDay === "today" ? todayData : tomorrowData;
+  const dayLabel     = activeDay === "today" ? "Today" : "Tomorrow";
+
+  /* unit-converted chart data */
+  const powerDisplay  = powerUnit === "kW"
+    ? data.power.map(d => ({ ...d, value: +(d.value / 1000).toFixed(3) }))
+    : data.power;
+  const energyDisplay = energyUnit === "Wh"
+    ? data.energy.map(d => ({ ...d, value: Math.round(d.value * 1000) }))
+    : data.energy;
+  const cumDisplay    = energyUnit === "Wh"
+    ? data.cumulative.map(d => ({ ...d, value: Math.round(d.value * 1000) }))
+    : data.cumulative;
 
   const handleProfile = () => navigate("/Profile", { state: user });
   const handleLogout  = () => { clearSession(); navigate("/"); };
@@ -303,6 +526,8 @@ export default function User() {
           <span className="topbar-title">Welcome back, <strong>{name || "User"}</strong></span>
         </div>
         <div className="topbar-right">
+          {/* NEW: live clock */}
+          <LiveClock />
           <div className="topbar-meta">{todayDate}</div>
           <button className="theme-toggle" onClick={toggleTheme} type="button">
             {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
@@ -346,41 +571,87 @@ export default function User() {
               <button className={`day-tab ${activeDay === "tomorrow" ? "active" : ""}`} onClick={() => setActiveDay("tomorrow")}>📆 Tomorrow — {kpis.tomorrow} kWh</button>
             </div>
 
+            {/* NEW: unit controls + download row */}
+            <div className="chart-controls-row">
+              <div className="chart-controls-left">
+                <UnitSelector
+                  label="Power axis:"
+                  options={[{ label: "W", value: "W" }, { label: "kW", value: "kW" }]}
+                  value={powerUnit}
+                  onChange={setPowerUnit}
+                />
+                <UnitSelector
+                  label="Energy axis:"
+                  options={[{ label: "Wh", value: "Wh" }, { label: "kWh", value: "kWh" }]}
+                  value={energyUnit}
+                  onChange={setEnergyUnit}
+                />
+              </div>
+              {activeDay === "today" && (
+                <button
+                  className="btn-download"
+                  onClick={() => downloadCSV(data.power, data.energy, data.cumulative, todayISO, user)}
+                >
+                  ⬇️ Download today's data (CSV)
+                </button>
+              )}
+            </div>
+
             <div className="charts-grid">
               <div className="chart-card full-width">
-                <div className="chart-header"><div><div className="chart-title">⚡ {dayLabel}'s Power Curve</div><div className="chart-subtitle">Instantaneous output throughout the day</div></div><span className="chart-badge">Watts (W)</span></div>
+                <div className="chart-header">
+                  <div>
+                    <div className="chart-title">⚡ {dayLabel}'s Power Curve</div>
+                    <div className="chart-subtitle">Instantaneous output throughout the day</div>
+                  </div>
+                  <span className="chart-badge">{powerUnit}</span>
+                </div>
                 <ResponsiveContainer width="100%" height={260}>
-                  <AreaChart data={data.power} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                  <AreaChart data={powerDisplay} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                     <defs><linearGradient id="powerGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#FBB03B" stopOpacity={0.25} /><stop offset="95%" stopColor="#FBB03B" stopOpacity={0} /></linearGradient></defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.1)" />
                     <XAxis dataKey="time" tick={{ fill: "var(--text-dim)", fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: "var(--text-dim)", fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<CustomTooltip unit="W" />} />
+                    <YAxis tick={{ fill: "var(--text-dim)", fontSize: 11 }} axisLine={false} tickLine={false} unit={` ${powerUnit}`} />
+                    <Tooltip content={<CustomTooltip unit={powerUnit} />} />
                     <Area type="monotone" dataKey="value" stroke="var(--amber)" strokeWidth={2} fill="url(#powerGrad)" dot={false} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
+
               <div className="chart-card">
-                <div className="chart-header"><div><div className="chart-title">🔋 Hourly Energy</div><div className="chart-subtitle">Energy generated per interval</div></div><span className="chart-badge">kWh</span></div>
+                <div className="chart-header">
+                  <div>
+                    <div className="chart-title">🔋 Hourly Energy</div>
+                    <div className="chart-subtitle">Energy generated per interval</div>
+                  </div>
+                  <span className="chart-badge">{energyUnit}</span>
+                </div>
                 <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={data.energy} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                  <BarChart data={energyDisplay} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.1)" />
                     <XAxis dataKey="time" tick={{ fill: "var(--text-dim)", fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: "var(--text-dim)", fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<CustomTooltip unit="kWh" />} />
+                    <YAxis tick={{ fill: "var(--text-dim)", fontSize: 11 }} axisLine={false} tickLine={false} unit={` ${energyUnit}`} />
+                    <Tooltip content={<CustomTooltip unit={energyUnit} />} />
                     <Bar dataKey="value" fill="var(--blue)" radius={[4, 4, 0, 0]} maxBarSize={24} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+
               <div className="chart-card">
-                <div className="chart-header"><div><div className="chart-title">📈 Cumulative Energy</div><div className="chart-subtitle">Running total over the day</div></div><span className="chart-badge">kWh</span></div>
+                <div className="chart-header">
+                  <div>
+                    <div className="chart-title">📈 Cumulative Energy</div>
+                    <div className="chart-subtitle">Running total over the day</div>
+                  </div>
+                  <span className="chart-badge">{energyUnit}</span>
+                </div>
                 <ResponsiveContainer width="100%" height={220}>
-                  <AreaChart data={data.cumulative} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+                  <AreaChart data={cumDisplay} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
                     <defs><linearGradient id="cumGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#4ade80" stopOpacity={0.25} /><stop offset="95%" stopColor="#4ade80" stopOpacity={0} /></linearGradient></defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.1)" />
                     <XAxis dataKey="time" tick={{ fill: "var(--text-dim)", fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: "var(--text-dim)", fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<CustomTooltip unit="kWh" />} />
+                    <YAxis tick={{ fill: "var(--text-dim)", fontSize: 11 }} axisLine={false} tickLine={false} unit={` ${energyUnit}`} />
+                    <Tooltip content={<CustomTooltip unit={energyUnit} />} />
                     <Area type="monotone" dataKey="value" stroke="var(--green)" strokeWidth={2} fill="url(#cumGrad)" dot={false} />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -388,6 +659,9 @@ export default function User() {
             </div>
           </>
         )}
+
+        {/* NEW: Reviews section */}
+        <ReviewsSection />
       </div>
     </div>
   );

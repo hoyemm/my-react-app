@@ -335,3 +335,57 @@ app.get("/forecast/:userId/:lat/:lon/:dec/:az/:kwp", async (req, res) => {
 });
 
 app.listen(3001, () => console.log("Backend running on port 3001"));
+
+/* ══════════════════════════════════════════════
+   FEEDBACK / REVIEWS  (ported from sma-yer/pfa)
+   POST /feedback  — submit a review
+   GET  /feedback  — list last 20 reviews
+══════════════════════════════════════════════ */
+db.connect ? null : null; // connection already open above
+
+// Create table if it doesn't exist yet (runs once at startup)
+db.query(`
+  CREATE TABLE IF NOT EXISTS feedback (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    name       VARCHAR(100) NOT NULL DEFAULT 'Anonymous',
+    rating     TINYINT      NOT NULL,
+    comment    TEXT,
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+app.post("/feedback", async (req, res) => {
+  const { name = "", rating, comment = "" } = req.body;
+  if (!rating || rating < 1 || rating > 5)
+    return res.status(400).json({ error: "Rating must be 1–5" });
+  try {
+    await q(
+      "INSERT INTO feedback (name, rating, comment) VALUES (?, ?, ?)",
+      [(name.trim() || "Anonymous"), rating, comment]
+    );
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Feedback insert error:", err);
+    return res.status(500).json({ error: "Failed to save feedback" });
+  }
+});
+
+app.get("/feedback", async (req, res) => {
+  try {
+    const rows = await q(`
+      SELECT name, rating, comment, created_at
+      FROM feedback
+      ORDER BY created_at DESC
+      LIMIT 20
+    `);
+    return res.json(rows.map(r => ({
+      name:    r.name,
+      rating:  r.rating,
+      comment: r.comment,
+      date:    new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    })));
+  } catch (err) {
+    console.error("Feedback fetch error:", err);
+    return res.status(500).json({ error: "Failed to fetch feedback" });
+  }
+});

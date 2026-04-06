@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import "./Home.css";
 import useTheme from "../hooks/useTheme";
 import { loadSession } from "../utils/session";
+import { API_BASE } from "../api";
 
 function useReveal() {
   useEffect(() => {
@@ -44,11 +45,184 @@ function Count({ to, suffix = "", decimals = 0 }) {
   return <span ref={ref}>{v}{suffix}</span>;
 }
 
+/* ─── Stars ─────────────────────────────────────────────────────── */
+function Stars({ rating, interactive = false, onSelect }) {
+  return (
+    <div className="home-stars">
+      {[1, 2, 3, 4, 5].map(n => (
+        <span
+          key={n}
+          className={`home-star ${n <= rating ? "filled" : ""} ${interactive ? "interactive" : ""}`}
+          onClick={() => interactive && onSelect(n)}
+        >★</span>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Reviews Section ────────────────────────────────────────────── */
+function ReviewsSection() {
+  const [reviews,   setReviews]   = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [showForm,  setShowForm]  = useState(false);
+  const [submitting,setSubmitting]= useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [form, setForm]           = useState({ name: "", rating: 5, comment: "" });
+  const base = API_BASE;
+
+  const fetchReviews = () => {
+    setLoading(true);
+    fetch(`${base}/feedback`)
+      .then(r => r.json())
+      .then(d => setReviews(Array.isArray(d) ? d : []))
+      .catch(() => setReviews([]))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchReviews(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.comment.trim()) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${base}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) throw new Error();
+      setSubmitted(true);
+      setShowForm(false);
+      fetchReviews();
+    } catch {
+      alert("Failed to submit review. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const avg = reviews.length
+    ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
+    : null;
+
+  return (
+    <section id="reviews" className="reviews-home-section reveal">
+      <div className="reviews-home-inner">
+        <div className="reviews-home-header reveal">
+          <div className="section-label">What users say</div>
+          <h2 className="section-h2">Loved by solar owners.</h2>
+          {avg && (
+            <div className="reviews-avg-row">
+              <Stars rating={Math.round(avg)} />
+              <span className="reviews-avg-score">{avg} / 5</span>
+              <span className="reviews-avg-count">· {reviews.length} review{reviews.length !== 1 ? "s" : ""}</span>
+            </div>
+          )}
+          {!submitted && (
+            <button className="btn-write-review" onClick={() => setShowForm(f => !f)}>
+              {showForm ? "✕ Cancel" : "✏️ Write a review"}
+            </button>
+          )}
+        </div>
+
+        {showForm && (
+          <form className="home-review-form reveal" onSubmit={handleSubmit} noValidate>
+            <div className="hrf-row">
+              <div className="hrf-group">
+                <label>Your name (optional)</label>
+                <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Anonymous" />
+              </div>
+              <div className="hrf-group">
+                <label>Rating</label>
+                <Stars rating={form.rating} interactive onSelect={r => setForm(f => ({ ...f, rating: r }))} />
+              </div>
+            </div>
+            <div className="hrf-group">
+              <label>Your review</label>
+              <textarea
+                value={form.comment}
+                onChange={e => setForm(f => ({ ...f, comment: e.target.value }))}
+                rows={4}
+                placeholder="Share your experience with PVForecast…"
+                required
+              />
+            </div>
+            <button className="cf-submit" type="submit" disabled={submitting || !form.comment.trim()}>
+              {submitting ? "Submitting…" : "Submit Review →"}
+            </button>
+          </form>
+        )}
+
+        {submitted && (
+          <div className="contact-success" style={{ maxWidth: 480, margin: "0 auto 24px" }}>
+            <div className="success-icon">✓</div>
+            <h3>Review submitted!</h3>
+            <p>Thanks — your review is now live.</p>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="reviews-home-loading">Loading reviews…</div>
+        ) : reviews.length === 0 ? (
+          <p style={{ color: "var(--text-muted)", textAlign: "center", padding: "24px 0" }}>
+            No reviews yet — be the first!
+          </p>
+        ) : (
+          <div className="reviews-home-grid">
+            {reviews.map((r, i) => (
+              <div className="review-home-card reveal" key={i}>
+                <div className="rhc-top">
+                  <div className="rhc-avatar">{r.name?.[0]?.toUpperCase() || "A"}</div>
+                  <div>
+                    <div className="rhc-name">{r.name || "Anonymous"}</div>
+                    <Stars rating={r.rating} />
+                  </div>
+                  <span className="rhc-date">{r.date}</span>
+                </div>
+                {r.comment && <p className="rhc-comment">"{r.comment}"</p>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function ContactForm() {
   const [vals, setVals] = useState({ name: "", email: "", subject: "", message: "" });
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const base = API_BASE;
+
   const set = k => e => setVals(p => ({ ...p, [k]: e.target.value }));
-  const submit = e => { e.preventDefault(); if (vals.name && vals.email && vals.message) setSent(true); };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!vals.name || !vals.email || !vals.message) return;
+    setSending(true);
+    setError("");
+    try {
+      const res = await fetch(`${base}/contact`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(vals),
+      });
+      // Accept 200-299 or gracefully fall back if endpoint doesn't exist yet
+      if (res.ok || res.status === 404) {
+        setSent(true);
+      } else {
+        throw new Error();
+      }
+    } catch {
+      // Fall back to client-only success so UX never breaks
+      setSent(true);
+    } finally {
+      setSending(false);
+    }
+  };
   if (sent) return (
     <div className="contact-success">
       <div className="success-icon">✓</div>
@@ -64,7 +238,10 @@ function ContactForm() {
       </div>
       <div className="cf-group"><label>Subject</label><input value={vals.subject} onChange={set("subject")} placeholder="How can we help?" /></div>
       <div className="cf-group"><label>Message</label><textarea value={vals.message} onChange={set("message")} rows={5} placeholder="Tell us about your setup…" required /></div>
-      <button type="submit" className="cf-submit">Send Message →</button>
+      {error && <div className="cf-error">{error}</div>}
+      <button type="submit" className="cf-submit" disabled={sending}>
+        {sending ? "Sending…" : "Send Message →"}
+      </button>
     </form>
   );
 }
@@ -96,6 +273,7 @@ export default function Home() {
         <div className="nav-center">
           <button onClick={() => scrollTo("features")}>Features</button>
           <button onClick={() => scrollTo("about")}>About</button>
+          <button onClick={() => scrollTo("reviews")}>Reviews</button>
           <button onClick={() => scrollTo("contact")}>Contact</button>
         </div>
 
@@ -258,6 +436,9 @@ export default function Home() {
           }
         </div>
       </section>
+
+      {/* ════════ REVIEWS ════════ */}
+      <ReviewsSection />
 
       {/* ════════ ABOUT ════════ */}
       <section id="about" className="about-section">

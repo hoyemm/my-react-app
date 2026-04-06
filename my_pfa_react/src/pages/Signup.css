@@ -313,3 +313,44 @@ input[type=number] { -moz-appearance: textfield; }
   .signup-right { padding: 40px 24px; }
   .form-row { grid-template-columns: 1fr; }
 }
+
+/* ── Password strength bar ── */
+.pw-strength-wrap {
+  margin-bottom: 14px;
+}
+.pw-strength-bars {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 7px;
+}
+.pw-strength-segment {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  transition: background 0.35s ease;
+}
+.pw-strength-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pw-strength-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  min-width: 40px;
+}
+.pw-strength-rules {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.pw-rule {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  transition: color 0.2s;
+}
+.pw-rule.pass {
+  color: #22c55e;
+}
