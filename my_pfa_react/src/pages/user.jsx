@@ -315,9 +315,9 @@ export default function User() {
         <div className="system-info">
           <span className="system-info-label">⚡ System</span>
           <div className="system-pill"><span>📍</span><strong>{latitude || "—"}°N, {longitude || "—"}°E</strong></div>
-          <div className="system-pill"><span>↕️</span>Dec <strong>{declination || "—"}°</strong></div>
-          <div className="system-pill"><span>↔️</span>Az <strong>{azimuth || "—"}°</strong></div>
-          <div className="system-pill"><span>🔋</span><strong>{capacity || "—"} kWp</strong></div>
+          <div className="system-pill">Dec <strong>{declination || "—"}°</strong></div>
+          <div className="system-pill">Az <strong>{azimuth || "—"}°</strong></div>
+          <div className="system-pill">Cap <strong>{capacity || "—"} kWp</strong></div>
         </div>
 
         <WeatherSection userId={userId} latitude={latitude} longitude={longitude} />

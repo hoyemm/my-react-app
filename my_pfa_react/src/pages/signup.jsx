@@ -74,7 +74,21 @@ function SignupPage() {
     if (!mapReady || !mapRef.current || mapInstanceRef.current) return;
     const L = window.L;
 
-    const map = L.map(mapRef.current, { center: [48, 10], zoom: 4 });
+    // ── FIX: clamp pan to real-world bounds ──────────────────────────────
+    const worldBounds = L.latLngBounds(
+      L.latLng(-85, -180),  // south-west
+      L.latLng(85,   180)   // north-east
+    );
+
+    const map = L.map(mapRef.current, {
+      center: [48, 10],
+      zoom: 4,
+      maxBounds: worldBounds,        // prevents panning outside the world
+      maxBoundsViscosity: 1.0,       // hard wall — map snaps back instantly
+      minZoom: 2,                    // prevents zooming out to see the void
+    });
+    // ─────────────────────────────────────────────────────────────────────
+
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       attribution: "© OpenStreetMap contributors © CARTO",
       subdomains: "abcd",
@@ -89,7 +103,10 @@ function SignupPage() {
     });
 
     map.on("click", (e) => {
-      const { lat, lng } = e.latlng;
+      // ── FIX: clamp coordinates to valid ranges ────────────────────────
+      const lat = Math.max(-85,  Math.min(85,  e.latlng.lat));
+      const lng = Math.max(-180, Math.min(180, e.latlng.lng));
+      // ─────────────────────────────────────────────────────────────────
       const rLat = Math.round(lat * 10000) / 10000;
       const rLng = Math.round(lng * 10000) / 10000;
       if (markerRef.current) markerRef.current.setLatLng([rLat, rLng]);
