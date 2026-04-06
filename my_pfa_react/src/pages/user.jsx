@@ -288,146 +288,7 @@ function downloadCSV(powerData, energyData, cumulativeData, date, user) {
   URL.revokeObjectURL(url);
 }
 
-/* ─── NEW: Stars display ─────────────────────────────────────────── */
-function Stars({ rating, interactive = false, onSelect }) {
-  return (
-    <div className="stars">
-      {[1, 2, 3, 4, 5].map(n => (
-        <span
-          key={n}
-          className={`star ${n <= rating ? "filled" : ""} ${interactive ? "interactive" : ""}`}
-          onClick={() => interactive && onSelect(n)}
-        >★</span>
-      ))}
-    </div>
-  );
-}
 
-/* ─── NEW: Reviews section ──────────────────────────────────────── */
-function ReviewsSection() {
-  const [reviews, setReviews]   = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [form, setForm]         = useState({ name: "", rating: 5, comment: "" });
-  const [submitted, setSubmitted] = useState(false);
-
-  const fetchReviews = () => {
-    setLoading(true);
-    axios.get(`${API_BASE}/feedback`)
-      .then(res => setReviews(res.data))
-      .catch(() => setReviews([]))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => { fetchReviews(); }, []);
-
-  const handleSubmit = async () => {
-    if (!form.comment.trim()) return;
-    setSubmitting(true);
-    try {
-      await axios.post(`${API_BASE}/feedback`, form);
-      setSubmitted(true);
-      setShowForm(false);
-      fetchReviews();
-    } catch {
-      alert("Failed to submit review. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const avgRating = reviews.length
-    ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
-    : null;
-
-  return (
-    <div className="reviews-section">
-      <div className="reviews-header">
-        <div>
-          <div className="reviews-title">💬 User Reviews</div>
-          {avgRating && (
-            <div className="reviews-avg">
-              <Stars rating={Math.round(avgRating)} />
-              <span className="avg-score">{avgRating} / 5</span>
-              <span className="avg-count">({reviews.length} review{reviews.length !== 1 ? "s" : ""})</span>
-            </div>
-          )}
-        </div>
-        {!submitted && (
-          <button className="btn-review-toggle" onClick={() => setShowForm(f => !f)}>
-            {showForm ? "✕ Cancel" : "✏️ Write a review"}
-          </button>
-        )}
-      </div>
-
-      {/* Review form */}
-      {showForm && (
-        <div className="review-form">
-          <div className="rf-row">
-            <div className="rf-group">
-              <label>Your name (optional)</label>
-              <input
-                value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                placeholder="Anonymous"
-              />
-            </div>
-            <div className="rf-group">
-              <label>Rating</label>
-              <Stars rating={form.rating} interactive onSelect={r => setForm(f => ({ ...f, rating: r }))} />
-            </div>
-          </div>
-          <div className="rf-group">
-            <label>Your review</label>
-            <textarea
-              value={form.comment}
-              onChange={e => setForm(f => ({ ...f, comment: e.target.value }))}
-              rows={4}
-              placeholder="Share your experience with PVForecast…"
-            />
-          </div>
-          <button
-            className="rf-submit"
-            onClick={handleSubmit}
-            disabled={submitting || !form.comment.trim()}
-          >
-            {submitting ? "Submitting…" : "Submit Review →"}
-          </button>
-        </div>
-      )}
-
-      {submitted && (
-        <div className="review-thanks">
-          <span>✓</span> Thanks for your review! It's now visible to everyone.
-        </div>
-      )}
-
-      {/* Reviews list */}
-      {loading ? (
-        <div className="wx-loading"><div className="wx-spinner" /><span>Loading reviews…</span></div>
-      ) : reviews.length === 0 ? (
-        <div className="reviews-empty">No reviews yet — be the first!</div>
-      ) : (
-        <div className="reviews-list">
-          {reviews.map((r, i) => (
-            <div className="review-card" key={i}>
-              <div className="rc-top">
-                <div className="rc-avatar">{r.name?.[0]?.toUpperCase() || "A"}</div>
-                <div>
-                  <div className="rc-name">{r.name || "Anonymous"}</div>
-                  <Stars rating={r.rating} />
-                </div>
-                <span className="rc-date">{r.date}</span>
-              </div>
-              {r.comment && <p className="rc-comment">{r.comment}</p>}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 /* ══════════════════════════════════════════════
    MAIN DASHBOARD
@@ -538,8 +399,8 @@ export default function User() {
 
       <div className="dashboard-content">
         <div className="system-info">
-          <span className="system-info-label">⚡ System</span>
-          <div className="system-pill"><span>📍</span><strong>{latitude || "—"}°N, {longitude || "—"}°E</strong></div>
+          <span className="system-info-label"> System</span>
+          <div className="system-pill"><strong>{latitude || "—"}°N, {longitude || "—"}°E</strong></div>
           <div className="system-pill">Dec <strong>{declination || "—"}°</strong></div>
           <div className="system-pill">Az <strong>{azimuth || "—"}°</strong></div>
           <div className="system-pill">Cap <strong>{capacity || "—"} kWp</strong></div>
@@ -548,10 +409,10 @@ export default function User() {
         <WeatherSection userId={userId} latitude={latitude} longitude={longitude} />
 
         {forecastState === "cached" && forecastUpdatedAt && (
-          <div className="stale-banner"><span>📦</span><span>Showing cached solar forecast from <strong>{fmtUpdated(forecastUpdatedAt)}</strong> — live data temporarily unavailable</span></div>
+          <div className="stale-banner"><span>Showing cached solar forecast from <strong>{fmtUpdated(forecastUpdatedAt)}</strong> — live data temporarily unavailable</span></div>
         )}
         {forecastState === "error" && (
-          <div className="forecast-error-banner"><span>⚡</span><div><strong>Solar forecast unavailable</strong><p>Could not reach the forecast API and no cached data was found.</p></div></div>
+          <div className="forecast-error-banner"><div><strong>Solar forecast unavailable</strong><p>Could not reach the forecast API and no cached data was found.</p></div></div>
         )}
         {forecastState === "loading" && (
           <div className="forecast-loading"><div className="loading-spinner-sm" /><span>Fetching solar forecast…</span></div>
@@ -560,10 +421,10 @@ export default function User() {
         {(forecastState === "live" || forecastState === "cached") && (
           <>
             <div className="kpi-grid">
-              <div className="kpi-card today">    <div className="kpi-icon">📅</div><div className="kpi-label">Today's Production</div><div className="kpi-value">{kpis.today}</div><div className="kpi-unit">kWh — {todayDate}</div></div>
-              <div className="kpi-card tomorrow"> <div className="kpi-icon">📆</div><div className="kpi-label">Tomorrow's Forecast</div><div className="kpi-value">{kpis.tomorrow}</div><div className="kpi-unit">kWh — {tomorrowDate}</div></div>
-              <div className="kpi-card current">  <div className="kpi-icon">⚡</div><div className="kpi-label">Current Output</div><div className="kpi-value">{kpis.current}</div><div className="kpi-unit">kW right now</div></div>
-              <div className="kpi-card peak">     <div className="kpi-icon">🏆</div><div className="kpi-label">Peak Power</div><div className="kpi-value">{kpis.peak}</div><div className="kpi-unit">kW maximum</div></div>
+              <div className="kpi-card today">    <div className="kpi-label">Today's Production</div><div className="kpi-value">{kpis.today}</div><div className="kpi-unit">kWh — {todayDate}</div></div>
+              <div className="kpi-card tomorrow"> <div className="kpi-label">Tomorrow's Forecast</div><div className="kpi-value">{kpis.tomorrow}</div><div className="kpi-unit">kWh — {tomorrowDate}</div></div>
+              <div className="kpi-card current">  <div className="kpi-label">Current Output</div><div className="kpi-value">{kpis.current}</div><div className="kpi-unit">kW right now</div></div>
+              <div className="kpi-card peak">    <div className="kpi-label">Peak Power</div><div className="kpi-value">{kpis.peak}</div><div className="kpi-unit">kW maximum</div></div>
             </div>
 
             <div className="day-tabs">
@@ -592,7 +453,7 @@ export default function User() {
                   className="btn-download"
                   onClick={() => downloadCSV(data.power, data.energy, data.cumulative, todayISO, user)}
                 >
-                  ⬇️ Download today's data (CSV)
+                  Download today's data (CSV)
                 </button>
               )}
             </div>
@@ -601,7 +462,7 @@ export default function User() {
               <div className="chart-card full-width">
                 <div className="chart-header">
                   <div>
-                    <div className="chart-title">⚡ {dayLabel}'s Power Curve</div>
+                    <div className="chart-title">{dayLabel}'s Power Curve</div>
                     <div className="chart-subtitle">Instantaneous output throughout the day</div>
                   </div>
                   <span className="chart-badge">{powerUnit}</span>
@@ -621,7 +482,7 @@ export default function User() {
               <div className="chart-card">
                 <div className="chart-header">
                   <div>
-                    <div className="chart-title">🔋 Hourly Energy</div>
+                    <div className="chart-title">Hourly Energy</div>
                     <div className="chart-subtitle">Energy generated per interval</div>
                   </div>
                   <span className="chart-badge">{energyUnit}</span>
@@ -640,7 +501,7 @@ export default function User() {
               <div className="chart-card">
                 <div className="chart-header">
                   <div>
-                    <div className="chart-title">📈 Cumulative Energy</div>
+                    <div className="chart-title">Cumulative Energy</div>
                     <div className="chart-subtitle">Running total over the day</div>
                   </div>
                   <span className="chart-badge">{energyUnit}</span>
@@ -660,8 +521,6 @@ export default function User() {
           </>
         )}
 
-        {/* NEW: Reviews section */}
-        <ReviewsSection />
       </div>
     </div>
   );

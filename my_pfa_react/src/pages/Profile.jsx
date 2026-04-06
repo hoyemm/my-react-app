@@ -227,9 +227,9 @@ export default function Profile() {
           </div>
           <nav className="profile-nav">
             {[
-              { id: "account",  label: "👤 Account"  },
-              { id: "system",   label: "⚡ PV System" },
-              { id: "location", label: "📍 Location"  },
+              { id: "account",  label: " Account"  },
+              { id: "system",   label: " PV System" },
+              { id: "location", label: " Location"  },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -244,10 +244,10 @@ export default function Profile() {
           <div className="profile-system-summary">
             <div className="pss-label">Current System</div>
             {[
-              ["📍", `${loc.latitude  || existing.latitude  || "—"}°, ${loc.longitude || existing.longitude || "—"}°`],
-              ["↕️", `Declination ${system.declination || existing.declination || "—"}°`],
-              ["↔️", `Azimuth ${system.azimuth || existing.azimuth || "—"}°`],
-              ["🔋", `${system.capacity || existing.capacity || "—"} kWp`],
+              ["", `${loc.latitude  || existing.latitude  || "—"}°, ${loc.longitude || existing.longitude || "—"}°`],
+              ["", `Declination ${system.declination || existing.declination || "—"}°`],
+              ["", `Azimuth ${system.azimuth || existing.azimuth || "—"}°`],
+              ["", `${system.capacity || existing.capacity || "—"} kWp`],
             ].map(([icon, text]) => (
               <div className="pss-row" key={text}><span>{icon}</span><span>{text}</span></div>
             ))}
@@ -314,7 +314,7 @@ export default function Profile() {
           {/* ── SYSTEM TAB ── */}
           {activeTab === "system" && (
             <div className="profile-section">
-              <div className="profile-section-title">⚡ PV System Configuration</div>
+              <div className="profile-section-title"> PV System Configuration</div>
               <p className="profile-section-sub">
                 Change your panel specs — no email or password needed here.
               </p>
@@ -363,7 +363,7 @@ export default function Profile() {
                 {errors.capacity && <span className="pf-error">⚠ {errors.capacity}</span>}
               </div>
               <div className="pf-info-card">
-                <div className="pf-info-title">💡 Tips</div>
+                <div className="pf-info-title"> Tips</div>
                 <ul>
                   <li><strong>Declination</strong> — tilt from horizontal (0° = flat, 90° = vertical)</li>
                   <li><strong>Azimuth</strong> — panel direction (0° = South, −90° = East, +90° = West)</li>
@@ -376,7 +376,7 @@ export default function Profile() {
           {/* ── LOCATION TAB ── */}
           {activeTab === "location" && (
             <div className="profile-section">
-              <div className="profile-section-title">📍 Installation Location</div>
+              <div className="profile-section-title"> Installation Location</div>
               <p className="profile-section-sub">
                 Click the map or enter coordinates to update your site.
               </p>
@@ -434,7 +434,7 @@ export default function Profile() {
               onClick={handleSave}
               disabled={loading}
             >
-              {loading ? "⏳ Saving…" : "💾 Save Changes"}
+              {loading ? " Saving…" : " Save Changes"}
             </button>
           </div>
         </main>

@@ -60,14 +60,105 @@ function Stars({ rating, interactive = false, onSelect }) {
   );
 }
 
+/* ─── Review Modal ───────────────────────────────────────────────── */
+function ReviewModal({ onClose, onSubmitted }) {
+  const [form, setForm]           = useState({ name: "", rating: 5, comment: "" });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const base = API_BASE;
+
+  // Close on backdrop click
+  const handleBackdrop = (e) => { if (e.target === e.currentTarget) onClose(); };
+
+  // Close on Escape key
+  useEffect(() => {
+    const h = e => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [onClose]);
+
+  const handleSubmit = async () => {
+    if (!form.comment.trim()) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${base}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) throw new Error();
+      setSubmitted(true);
+      onSubmitted();
+    } catch {
+      alert("Failed to submit review. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="review-modal-backdrop" onClick={handleBackdrop}>
+      <div className="review-modal">
+        <div className="review-modal-header">
+          <div>
+            <div className="review-modal-title">✏️ Write a Review</div>
+            <div className="review-modal-sub">Share your experience with PVForecast</div>
+          </div>
+          <button className="review-modal-close" onClick={onClose}>✕</button>
+        </div>
+
+        {submitted ? (
+          <div className="review-modal-success">
+            <div className="review-modal-success-icon">✓</div>
+            <h3>Review submitted!</h3>
+            <p>Thanks — your review is now live for everyone to see.</p>
+            <button className="cf-submit" onClick={onClose}>Close</button>
+          </div>
+        ) : (
+          <div className="review-modal-body">
+            <div className="hrf-row">
+              <div className="hrf-group">
+                <label>Your name <span style={{ opacity: 0.5 }}>(optional)</span></label>
+                <input
+                  value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="Anonymous"
+                  autoFocus
+                />
+              </div>
+              <div className="hrf-group">
+                <label>Rating</label>
+                <Stars rating={form.rating} interactive onSelect={r => setForm(f => ({ ...f, rating: r }))} />
+              </div>
+            </div>
+            <div className="hrf-group">
+              <label>Your review</label>
+              <textarea
+                value={form.comment}
+                onChange={e => setForm(f => ({ ...f, comment: e.target.value }))}
+                rows={4}
+                placeholder="How has PVForecast helped you? What do you love about it?"
+              />
+            </div>
+            <button
+              className="cf-submit"
+              onClick={handleSubmit}
+              disabled={submitting || !form.comment.trim()}
+            >
+              {submitting ? "Submitting…" : "Submit Review →"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Reviews Section ────────────────────────────────────────────── */
 function ReviewsSection() {
   const [reviews,   setReviews]   = useState([]);
   const [loading,   setLoading]   = useState(true);
-  const [showForm,  setShowForm]  = useState(false);
-  const [submitting,setSubmitting]= useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [form, setForm]           = useState({ name: "", rating: 5, comment: "" });
+  const [showModal, setShowModal] = useState(false);
   const base = API_BASE;
 
   const fetchReviews = () => {
@@ -81,112 +172,61 @@ function ReviewsSection() {
 
   useEffect(() => { fetchReviews(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!form.comment.trim()) return;
-    setSubmitting(true);
-    try {
-      const res = await fetch(`${base}/feedback`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) throw new Error();
-      setSubmitted(true);
-      setShowForm(false);
-      fetchReviews();
-    } catch {
-      alert("Failed to submit review. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const avg = reviews.length
     ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
     : null;
 
   return (
-    <section id="reviews" className="reviews-home-section reveal">
-      <div className="reviews-home-inner">
-        <div className="reviews-home-header reveal">
-          <div className="section-label">What users say</div>
-          <h2 className="section-h2">Loved by solar owners.</h2>
-          {avg && (
-            <div className="reviews-avg-row">
-              <Stars rating={Math.round(avg)} />
-              <span className="reviews-avg-score">{avg} / 5</span>
-              <span className="reviews-avg-count">· {reviews.length} review{reviews.length !== 1 ? "s" : ""}</span>
-            </div>
-          )}
-          {!submitted && (
-            <button className="btn-write-review" onClick={() => setShowForm(f => !f)}>
-              {showForm ? "✕ Cancel" : "✏️ Write a review"}
+    <>
+      {showModal && (
+        <ReviewModal
+          onClose={() => setShowModal(false)}
+          onSubmitted={() => { fetchReviews(); }}
+        />
+      )}
+      <section id="reviews" className="reviews-home-section reveal">
+        <div className="reviews-home-inner">
+          <div className="reviews-home-header reveal">
+            <div className="section-label">What users say</div>
+            <h2 className="section-h2">Loved by solar owners.</h2>
+            {avg && (
+              <div className="reviews-avg-row">
+                <Stars rating={Math.round(avg)} />
+                <span className="reviews-avg-score">{avg} / 5</span>
+                <span className="reviews-avg-count">· {reviews.length} review{reviews.length !== 1 ? "s" : ""}</span>
+              </div>
+            )}
+            <button className="btn-write-review" onClick={() => setShowModal(true)}>
+              ✏️ Write a review
             </button>
+          </div>
+
+          {loading ? (
+            <div className="reviews-home-loading">Loading reviews…</div>
+          ) : reviews.length === 0 ? (
+            <p style={{ color: "var(--text-muted)", textAlign: "center", padding: "24px 0" }}>
+              No reviews yet — be the first!
+            </p>
+          ) : (
+            <div className="reviews-home-grid">
+              {reviews.map((r, i) => (
+                <div className="review-home-card reveal" key={i}>
+                  <div className="rhc-top">
+                    <div className="rhc-avatar">{r.name?.[0]?.toUpperCase() || "A"}</div>
+                    <div>
+                      <div className="rhc-name">{r.name || "Anonymous"}</div>
+                      <Stars rating={r.rating} />
+                    </div>
+                    <span className="rhc-date">{r.date}</span>
+                  </div>
+                  {r.comment && <p className="rhc-comment">"{r.comment}"</p>}
+                </div>
+              ))}
+            </div>
           )}
         </div>
-
-        {showForm && (
-          <form className="home-review-form reveal" onSubmit={handleSubmit} noValidate>
-            <div className="hrf-row">
-              <div className="hrf-group">
-                <label>Your name (optional)</label>
-                <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Anonymous" />
-              </div>
-              <div className="hrf-group">
-                <label>Rating</label>
-                <Stars rating={form.rating} interactive onSelect={r => setForm(f => ({ ...f, rating: r }))} />
-              </div>
-            </div>
-            <div className="hrf-group">
-              <label>Your review</label>
-              <textarea
-                value={form.comment}
-                onChange={e => setForm(f => ({ ...f, comment: e.target.value }))}
-                rows={4}
-                placeholder="Share your experience with PVForecast…"
-                required
-              />
-            </div>
-            <button className="cf-submit" type="submit" disabled={submitting || !form.comment.trim()}>
-              {submitting ? "Submitting…" : "Submit Review →"}
-            </button>
-          </form>
-        )}
-
-        {submitted && (
-          <div className="contact-success" style={{ maxWidth: 480, margin: "0 auto 24px" }}>
-            <div className="success-icon">✓</div>
-            <h3>Review submitted!</h3>
-            <p>Thanks — your review is now live.</p>
-          </div>
-        )}
-
-        {loading ? (
-          <div className="reviews-home-loading">Loading reviews…</div>
-        ) : reviews.length === 0 ? (
-          <p style={{ color: "var(--text-muted)", textAlign: "center", padding: "24px 0" }}>
-            No reviews yet — be the first!
-          </p>
-        ) : (
-          <div className="reviews-home-grid">
-            {reviews.map((r, i) => (
-              <div className="review-home-card reveal" key={i}>
-                <div className="rhc-top">
-                  <div className="rhc-avatar">{r.name?.[0]?.toUpperCase() || "A"}</div>
-                  <div>
-                    <div className="rhc-name">{r.name || "Anonymous"}</div>
-                    <Stars rating={r.rating} />
-                  </div>
-                  <span className="rhc-date">{r.date}</span>
-                </div>
-                {r.comment && <p className="rhc-comment">"{r.comment}"</p>}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
+      </section>
+    </>
   );
 }
 
