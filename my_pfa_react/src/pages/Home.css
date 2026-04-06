@@ -19,7 +19,7 @@
   --hp-card:     #ffffff;
   --hp-border:   rgba(0,0,0,0.08);
   --hp-glow:     rgba(200,120,10,0.1);
-  --grid:        rgba(0,0,0,0.035);
+  --grid:        transparent;
   --muted:       #8a8fa8;
 }
 
@@ -112,8 +112,9 @@
 /* ════════════════ HERO ══════════════════════════════════════ */
 .hero {
   position: relative; min-height: 100vh;
-  display: grid; grid-template-columns: 1fr 1fr;
-  align-items: center; gap: 48px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  text-align: center;
   padding: 120px 48px 80px;
   overflow: hidden;
 }
@@ -164,7 +165,7 @@
   filter: brightness(0.28) saturate(0.5);
 }
 
-.hero-content { position: relative; z-index: 2; }
+.hero-content { position: relative; z-index: 2; max-width: 760px; width: 100%; }
 
 
 .hero-chip {
@@ -200,7 +201,7 @@
   margin-bottom: 40px;
 }
 
-.hero-btns { display: flex; gap: 14px; align-items: center; margin-bottom: 32px; }
+.hero-btns { display: flex; gap: 14px; align-items: center; justify-content: center; margin-bottom: 32px; }
 
 .btn-glow {
   display: inline-block;
@@ -1071,4 +1072,130 @@
 @media (max-width: 480px) {
   .review-modal { border-radius: 16px 16px 0 0; align-self: flex-end; }
   .review-modal-backdrop { align-items: flex-end; padding: 0; }
+}
+
+/* ══════════════════════════════════════════════
+   LIGHT MODE FIXES
+══════════════════════════════════════════════ */
+
+/* Contact form inputs */
+[data-theme="light"] .cf-group input,
+[data-theme="light"] .cf-group textarea {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.15);
+  color: #1a1c24;
+}
+[data-theme="light"] .cf-group label {
+  color: #5a5e72;
+}
+[data-theme="light"] .cf-group input::placeholder,
+[data-theme="light"] .cf-group textarea::placeholder {
+  color: #9096ae;
+}
+
+/* Review modal inputs */
+[data-theme="light"] .hrf-group input,
+[data-theme="light"] .hrf-group textarea {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.15);
+  color: #1a1c24;
+}
+[data-theme="light"] .hrf-group label {
+  color: #5a5e72;
+}
+[data-theme="light"] .hrf-group input::placeholder,
+[data-theme="light"] .hrf-group textarea::placeholder {
+  color: #9096ae;
+}
+
+/* Review modal background */
+[data-theme="light"] .review-modal {
+  background: #ffffff;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.18);
+}
+[data-theme="light"] .review-modal-backdrop {
+  background: rgba(0,0,0,0.35);
+}
+
+/* Contact form card */
+[data-theme="light"] .contact-form {
+  background: #ffffff;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.1);
+}
+
+/* Feature cards */
+[data-theme="light"] .feat-card {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.08);
+}
+[data-theme="light"] .feat-card:hover {
+  background: #faf8f3;
+}
+
+/* Ticker bar */
+[data-theme="light"] .ticker {
+  background: #ede9e0;
+  border-top-color: rgba(0,0,0,0.07);
+  border-bottom-color: rgba(0,0,0,0.07);
+}
+
+/* Review cards */
+[data-theme="light"] .review-home-card {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.08);
+}
+
+/* About card */
+[data-theme="light"] .about-card {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.08);
+}
+[data-theme="light"] .ac-row {
+  border-bottom-color: rgba(0,0,0,0.06);
+}
+
+/* Metrics section */
+[data-theme="light"] .metrics {
+  background: #ffffff;
+  border-color: rgba(0,0,0,0.07);
+}
+[data-theme="light"] .metric-sep {
+  background: rgba(0,0,0,0.08);
+}
+
+/* Step numbers */
+[data-theme="light"] .step-num {
+  background: rgba(0,0,0,0.06);
+  color: var(--amber);
+  border-color: rgba(0,0,0,0.1);
+}
+[data-theme="light"] .step-line {
+  background: rgba(0,0,0,0.08);
+}
+
+/* Hero card in light mode */
+[data-theme="light"] .hero-card {
+  background: rgba(255,255,255,0.92);
+  border-color: rgba(0,0,0,0.1);
+}
+
+/* Nav mobile menu */
+[data-theme="light"] .mobile-menu {
+  background: #faf8f3;
+  border-bottom-color: rgba(0,0,0,0.08);
+}
+
+/* Footer */
+[data-theme="light"] .footer {
+  background: #ede9e0;
+  border-top-color: rgba(0,0,0,0.08);
+}
+[data-theme="light"] .footer-bottom {
+  border-top-color: rgba(0,0,0,0.08);
+}
+
+/* cf-submit button readable in both modes */
+.cf-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

@@ -31,6 +31,15 @@ db.connect(err => {
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  db.query(`
+    CREATE TABLE IF NOT EXISTS feedback (
+      id         INT AUTO_INCREMENT PRIMARY KEY,
+      name       VARCHAR(100) NOT NULL DEFAULT 'Anonymous',
+      rating     TINYINT      NOT NULL,
+      comment    TEXT,
+      created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 });
 
 function q(sql, params = []) {
@@ -334,25 +343,11 @@ app.get("/forecast/:userId/:lat/:lon/:dec/:az/:kwp", async (req, res) => {
   return res.status(503).json({ error: "Forecast unavailable and no cache found" });
 });
 
-app.listen(3001, () => console.log("Backend running on port 3001"));
-
 /* ══════════════════════════════════════════════
-   FEEDBACK / REVIEWS  (ported from sma-yer/pfa)
+   FEEDBACK / REVIEWS
    POST /feedback  — submit a review
    GET  /feedback  — list last 20 reviews
 ══════════════════════════════════════════════ */
-db.connect ? null : null; // connection already open above
-
-// Create table if it doesn't exist yet (runs once at startup)
-db.query(`
-  CREATE TABLE IF NOT EXISTS feedback (
-    id         INT AUTO_INCREMENT PRIMARY KEY,
-    name       VARCHAR(100) NOT NULL DEFAULT 'Anonymous',
-    rating     TINYINT      NOT NULL,
-    comment    TEXT,
-    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
-  )
-`);
 
 app.post("/feedback", async (req, res) => {
   const { name = "", rating, comment = "" } = req.body;
@@ -378,14 +373,53 @@ app.get("/feedback", async (req, res) => {
       ORDER BY created_at DESC
       LIMIT 20
     `);
-    return res.json(rows.map(r => ({
-      name:    r.name,
-      rating:  r.rating,
-      comment: r.comment,
-      date:    new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-    })));
+    return res.json(rows.map(r => {
+      let date = "";
+      try {
+        const d = r.created_at instanceof Date ? r.created_at : new Date(r.created_at);
+        date = isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      } catch (_) { date = ""; }
+      return { name: r.name, rating: r.rating, comment: r.comment, date };
+    }));
   } catch (err) {
     console.error("Feedback fetch error:", err);
     return res.status(500).json({ error: "Failed to fetch feedback" });
   }
 });
+
+/* ══════════════════════════════════════════════
+   CONTACT FORM  POST /contact
+   Forwards contact form data via EmailJS REST API
+══════════════════════════════════════════════ */
+const EMAILJS_SERVICE_ID_C  = "service_p3jxsrl";
+const EMAILJS_TEMPLATE_ID_C = "template_palk2pm";
+const EMAILJS_PUBLIC_KEY_C  = "oQlht1MkjZC7zZ2BF";
+
+app.post("/contact", async (req, res) => {
+  const { name = "", email = "", subject = "", message = "" } = req.body;
+  if (!name || !email || !message)
+    return res.status(400).json({ error: "name, email and message are required" });
+  try {
+    const ejRes = await axios.post("https://api.emailjs.com/api/v1.0/email/send", {
+      service_id:  EMAILJS_SERVICE_ID_C,
+      template_id: EMAILJS_TEMPLATE_ID_C,
+      accessToken: EMAILJS_PUBLIC_KEY_C,   // ← fix: "user_id" causes 403 from server-side calls
+      template_params: {
+        from_name:  name,
+        from_email: email,
+        subject:    subject || "Contact from PVForecast",
+        message,
+      },
+    }, {
+      headers: { "Content-Type": "application/json" },
+      timeout: 8000,
+    });
+    if (ejRes.status === 200) return res.json({ success: true });
+    throw new Error("EmailJS responded with status " + ejRes.status);
+  } catch (err) {
+    console.error("Contact/EmailJS error:", err.response?.data || err.message);
+    return res.status(500).json({ error: "Failed to send email", details: err.response?.data || err.message });
+  }
+});
+
+app.listen(3001, () => console.log("Backend running on port 3001"));

@@ -101,7 +101,7 @@ function ReviewModal({ onClose, onSubmitted }) {
       <div className="review-modal">
         <div className="review-modal-header">
           <div>
-            <div className="review-modal-title">✏️ Write a Review</div>
+            <div className="review-modal-title">Write a Review</div>
             <div className="review-modal-sub">Share your experience with PVForecast</div>
           </div>
           <button className="review-modal-close" onClick={onClose}>✕</button>
@@ -164,9 +164,12 @@ function ReviewsSection() {
   const fetchReviews = () => {
     setLoading(true);
     fetch(`${base}/feedback`)
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then(d => setReviews(Array.isArray(d) ? d : []))
-      .catch(() => setReviews([]))
+      .catch(err => { console.error("Failed to load reviews:", err); setReviews([]); })
       .finally(() => setLoading(false));
   };
 
@@ -197,7 +200,7 @@ function ReviewsSection() {
               </div>
             )}
             <button className="btn-write-review" onClick={() => setShowModal(true)}>
-              ✏️ Write a review
+              Write a review
             </button>
           </div>
 
@@ -235,7 +238,6 @@ function ContactForm() {
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const base = API_BASE;
 
   const set = k => e => setVals(p => ({ ...p, [k]: e.target.value }));
 
@@ -245,20 +247,20 @@ function ContactForm() {
     setSending(true);
     setError("");
     try {
-      const res = await fetch(`${base}/contact`, {
+      const res = await fetch(`${API_BASE}/contact`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(vals),
       });
-      // Accept 200-299 or gracefully fall back if endpoint doesn't exist yet
-      if (res.ok || res.status === 404) {
+      if (res.ok) {
         setSent(true);
       } else {
-        throw new Error();
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Server error");
       }
-    } catch {
-      // Fall back to client-only success so UX never breaks
-      setSent(true);
+    } catch (err) {
+      setError("Failed to send message. Please try again or email us directly.");
+      console.error("Contact error:", err);
     } finally {
       setSending(false);
     }
@@ -324,8 +326,8 @@ export default function Home() {
           {isLoggedIn ? (
             /* User is signed in — show their name and a Dashboard link */
             <>
-              <span className="nav-user-greeting">👋 {session.name?.split(" ")[0]}</span>
-              <Link to="/User" className="nav-cta">☀️ Dashboard</Link>
+              <span className="nav-user-greeting">Hi, {session.name?.split(" ")[0]}</span>
+              <Link to="/User" className="nav-cta">Dashboard</Link>
             </>
           ) : (
             <>
@@ -346,7 +348,7 @@ export default function Home() {
             <button key={id} onClick={() => scrollTo(id)}>{id.charAt(0).toUpperCase() + id.slice(1)}</button>
           ))}
           {isLoggedIn ? (
-            <Link to="/User" onClick={() => setMenu(false)} className="mob-cta">☀️ Dashboard →</Link>
+            <Link to="/User" onClick={() => setMenu(false)} className="mob-cta">Dashboard →</Link>
           ) : (
             <>
               <Link to="/Login"  onClick={() => setMenu(false)}>Sign In</Link>
@@ -378,44 +380,19 @@ export default function Home() {
             )}
           </div>
           <div className="hero-trust">
-            <span>⚡ No credit card</span><span>·</span>
-            <span>🌍 Global coverage</span><span>·</span>
-            <span>📡 Real-time data</span>
+            <span>No credit card</span><span>·</span>
+            <span>Global coverage</span><span>·</span>
+            <span>Real-time data</span>
           </div>
         </div>
 
-        <div className="hero-card">
-          <div className="hcard-header">
-            <div className="hcard-title"><span className="hcard-pulse" />Live Forecast Preview</div>
-            <span className="hcard-badge">Paris · Today</span>
-          </div>
-          <div className="hcard-arc">
-            <svg viewBox="0 0 200 110" fill="none" className="arc-svg">
-              <path d="M10 100 A90 90 0 0 1 190 100" stroke="var(--grid)" strokeWidth="2" />
-              <path d="M10 100 A90 90 0 0 1 190 100" stroke="var(--amber)" strokeWidth="3" strokeDasharray="283" strokeDashoffset="60" strokeLinecap="round" style={{ filter: "drop-shadow(0 0 6px var(--amber))" }} />
-              <circle cx="168" cy="38" r="5" fill="var(--amber)" style={{ filter: "drop-shadow(0 0 8px var(--amber))" }} />
-              <text x="100" y="88" textAnchor="middle" fill="var(--amber)" fontSize="28" fontFamily="var(--font-display)" fontWeight="800">3.1</text>
-              <text x="100" y="104" textAnchor="middle" fill="var(--muted)" fontSize="10">kW peak</text>
-            </svg>
-          </div>
-          <div className="hcard-stats">
-            <div className="hcs"><strong>24.7</strong><span>kWh today</span></div>
-            <div className="hcs-div" />
-            <div className="hcs"><strong>22.1</strong><span>kWh tomorrow</span></div>
-            <div className="hcs-div" />
-            <div className="hcs"><strong>48h</strong><span>horizon</span></div>
-          </div>
-          <div className="hcard-mini-bars">
-            {[10,35,72,95,100,92,75,42,15].map((h, i) => <div key={i} className="hmb" style={{ height: `${h}%` }} />)}
-          </div>
-          <div className="hcard-footer">06:00 ─────────────── 18:00</div>
-        </div>
+
       </section>
 
       {/* ════════ TICKER ════════ */}
       <div className="ticker">
         <div className="ticker-inner">
-          {["☀️ 48-hour forecast window","⚡ 15-minute resolution","🌍 Works worldwide","📡 forecast.solar API","🔒 bcrypt secured","📊 Real-time charts","☀️ 48-hour forecast window","⚡ 15-minute resolution","🌍 Works worldwide","📡 forecast.solar API"]
+          {["48-hour forecast window","15-minute resolution","Works worldwide","forecast.solar API","bcrypt secured","Real-time charts","48-hour forecast window","15-minute resolution","Works worldwide","forecast.solar API"]
             .map((t, i) => <span key={i}>{t}</span>)}
         </div>
       </div>
